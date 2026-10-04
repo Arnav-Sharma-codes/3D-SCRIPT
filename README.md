@@ -72,6 +72,6 @@ The strict AGPL-3.0 provisions completely prohibit the extraction or integration
 
 For commercial studio deployment, automated pre-production API access pipelines, or enterprise operations requiring a bypass of the open-source mandate, you must secure a proprietary license directly from the parent entity.
 
-**For Enterprise Licensing & Commercial Clearances:** legal@scriptvector.ai  
+**For Enterprise Licensing & Commercial Clearances:** arnavsharmawk@gmail.com 
 **Copyright © 2026 Arnav Sharma. All Rights Reserved.**
 
