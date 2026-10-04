@@ -59,3 +59,19 @@ cp .env.example .env
 - Kotlin 2.1+
 - macOS 12+
 - Google Gemini API key (optional — mock mode available)
+
+## 📜 License & Intellectual Property Moat
+
+This repository is officially deployed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+### Open Source Track
+The public multiplatform UI framework and data contracts are open-source. Any independent creator, student, or developer modifying this software or interacting with its data routing models remotely over a network **MUST** make their complete modified repository architecture publicly available under the same AGPL-3.0 terms.
+
+### Enterprise & Studio Track
+The strict AGPL-3.0 provisions completely prohibit the extraction or integration of this codebase into closed, proprietary commercial software suites or internal cloud networks managed by media conglomerates or streaming platforms.
+
+For commercial studio deployment, automated pre-production API access pipelines, or enterprise operations requiring a bypass of the open-source mandate, you must secure a proprietary license directly from the parent entity.
+
+**For Enterprise Licensing & Commercial Clearances:** legal@scriptvector.ai  
+**Copyright © 2026 Arnav Sharma. All Rights Reserved.**
+
