@@ -1,0 +1,61 @@
+# 3DSCRIPT — Native Kotlin / Compose Multiplatform
+
+3D Script Studio analyzes screenplays scene by scene, mapping plot progression, character arc, and emotional flux into a time-ordered 3D trajectory.
+
+## Architecture
+
+```
+3DSCRIPT-kotlin/
+├── shared/    — Data contracts only (SceneBlock, VectorPoint, NarrativeTrack, API DTOs)
+├── engine/    — Proprietary server-side mathematical engine (Ktor + Gemini REST)
+└── app/       — Compose Multiplatform desktop UI (macOS native)
+```
+
+## Mathematical Pipeline
+
+```
+Script Text → NarrativeParser → VectorMapper (Gemini AI)
+    → NarrativeMetrics (scene-to-scene movement, dead zones)
+    → NarrativeTrack (one exact score point per scene, ordered by time)
+```
+
+Every parsed scene receives its own plot, character-arc, and emotional-flux scores. The app preserves those three scores as the plotted coordinates; the time axis orders and connects scene points without changing their 3D positions. Movement and pacing diagnostics compare adjacent scenes. The editor imports screenplay text and text-based PDFs; scanned PDFs need OCR before import.
+
+### Axis Definitions
+
+| Axis | Dimension | Range |
+|------|-----------|-------|
+| **X** | Plot Progression — external world-state change, goal advancement, structural pivots | 0–10 |
+| **Y** | Character Development — internal arc, agency shifts, relationship dynamics | 0–10 |
+| **Z** | Emotional Flux — tension, dread, joy, tonal contrast, audience affect | 0–10 |
+
+## Build
+
+```bash
+# 1. Copy and configure environment
+cp .env.example .env
+# Add your Gemini API key, or set SCORER_PROVIDER=mock for offline use
+
+# 2. Build engine JAR
+./gradlew :engine:jar
+
+# 3. Run the desktop app (development)
+./gradlew :app:run
+
+# 4. Package as macOS .dmg
+./gradlew :app:packageDmg
+```
+
+## Privacy
+
+- Engine binds to `127.0.0.1` only — never accessible from network
+- Script text never leaves your machine except for Gemini AI calls (user-controlled, user's own API key)
+- No telemetry, analytics, or cloud sync
+- Use `provider=mock` for fully offline operation
+
+## Requirements
+
+- Java 21 (Temurin recommended)
+- Kotlin 2.1+
+- macOS 12+
+- Google Gemini API key (optional — mock mode available)

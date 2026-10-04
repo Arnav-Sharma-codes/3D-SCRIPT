@@ -1,0 +1,15 @@
+.gradle/
+.kotlin/
+**/build/
+**/bin/
+.env
+.env.*
+!.env.example
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.log
+out/
+.idea/
+*.iml
+.DS_Store
