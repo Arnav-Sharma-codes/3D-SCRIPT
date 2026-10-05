@@ -53,6 +53,16 @@ cp .env.example .env
 - No telemetry, analytics, or cloud sync
 - Use `provider=mock` for fully offline operation
 
+## 🤖 AI-Native Engineering & Methodology
+
+**3D Script Studio** was conceptualized, architected, and directed by **Arnav Sharma**, utilizing modern AI coding tools as an execution stack to achieve extreme development velocity.
+
+* **Product Architecture, Vector Math & UX Design:** Arnav Sharma
+* **AI Coding Assistants & Code Generation:** Antigravity & OpenAI Codex
+* **Semantic Vector Scoring Engine:** Gemini API
+
+This project serves as a case study in **AI-native software architecture**—translating a novel spatial screenplay thesis into a fully functional, multi-module Kotlin Multiplatform desktop application in record time.
+
 ## Requirements
 
 - Java 21 (Temurin recommended)
