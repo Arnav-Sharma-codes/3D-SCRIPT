@@ -30,8 +30,10 @@ compose.desktop {
         mainClass = "com.threescript.app.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Pkg)
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Pkg)
             packageName = "3D Script Studio"
+            // macOS installers require a positive numeric bundle version. The
+            // GitHub release/tag carries the pre-release identifier instead.
             packageVersion = "1.0.0"
             description = "Narrative Intelligence Platform"
             copyright = "© 2026 3DSCRIPT"
@@ -41,7 +43,6 @@ compose.desktop {
                 bundleID = "com.threescript.studio"
                 dockName = "3D Script"
                 appCategory = "public.app-category.productivity"
-                iconFile.set(project.file("src/main/resources/icon.icns"))
                 minimumSystemVersion = "12.0"
                 infoPlist {
                     extraKeysRawXml = """
