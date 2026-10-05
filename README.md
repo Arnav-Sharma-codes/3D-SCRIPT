@@ -52,8 +52,7 @@ cp .env.example .env
 ```
 
 
-
-https://github.com/user-attachments/assets/da0e2f7f-dabd-4d60-8ab7-2bec509412c7
+https://github.com/user-attachments/assets/59d95a5e-bfc7-4bdc-9ddd-8f59a88d9807
 
 
 
