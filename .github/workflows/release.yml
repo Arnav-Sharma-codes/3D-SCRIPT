@@ -76,4 +76,7 @@ jobs:
           merge-multiple: true
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release-assets/* --prerelease --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          mapfile -d '' assets < <(find release-assets -type f -print0)
+          test "${#assets[@]}" -gt 0
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" --prerelease --title "$GITHUB_REF_NAME" --generate-notes
