@@ -17,7 +17,11 @@ import com.threescript.app.AppState
 import com.threescript.app.network.EngineClient
 import com.threescript.app.ui.panels.*
 import com.threescript.app.ui.components.SettingsDialog
+import com.threescript.app.ui.export.PdfExporter
 import kotlinx.coroutines.*
+import java.awt.FileDialog
+import java.awt.Frame
+import java.io.File
 
 // ── Design tokens (Studio Obsidian Slate) ─────────────────────────────────────
 val BgBase     = Color(0xFF08090D)
@@ -146,6 +150,7 @@ fun ApplicationScope.MainWindow(onCloseRequest: () -> Unit) {
 @Composable
 private fun TopBar(state: AppState, client: EngineClient, scope: CoroutineScope) {
     var showSettings by remember { mutableStateOf(false) }
+    var isExporting by remember { mutableStateOf(false) }
 
     Surface(color = BgSurface, tonalElevation = 0.dp) {
         Row(
@@ -172,6 +177,39 @@ private fun TopBar(state: AppState, client: EngineClient, scope: CoroutineScope)
                 state.track = null
                 state.selectedPoint = null
             }
+
+            // Export PDF — only active when analysis results are available
+            val canExport = state.hasResults && !isExporting
+            TopBarButton(
+                label = if (isExporting) "Exporting…" else "Export PDF",
+                icon = Icons.Default.PictureAsPdf,
+                enabled = canExport,
+            ) {
+                val track = state.track ?: return@TopBarButton
+                // Open native Save dialog on the EDT, then export on IO
+                scope.launch(Dispatchers.IO) {
+                    isExporting = true
+                    try {
+                        val dialog = FileDialog(null as Frame?, "Save Script Doctor Report", FileDialog.SAVE).apply {
+                            file = "${state.projectTitle.replace(" ", "_")}_script_report.pdf"
+                            isVisible = true
+                        }
+                        val dir = dialog.directory
+                        val fileName = dialog.file
+                        if (dir != null && fileName != null) {
+                            val outFile = File(dir, if (fileName.endsWith(".pdf")) fileName else "$fileName.pdf")
+                            PdfExporter.export(track, state.projectTitle, outFile)
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            state.analysisError = "PDF export failed: ${e.message}"
+                        }
+                    } finally {
+                        isExporting = false
+                    }
+                }
+            }
+
             TopBarButton("Settings", Icons.Default.Settings) {
                 showSettings = true
             }
@@ -182,6 +220,7 @@ private fun TopBar(state: AppState, client: EngineClient, scope: CoroutineScope)
         SettingsDialog(state = state, onDismiss = { showSettings = false })
     }
 }
+
 
 @Composable
 private fun EngineStatusBadge(ready: Boolean) {
@@ -201,8 +240,17 @@ private fun EngineStatusBadge(ready: Boolean) {
 }
 
 @Composable
-private fun TopBarButton(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    TextButton(onClick = onClick, colors = ButtonDefaults.textButtonColors(contentColor = TextMid)) {
+private fun TopBarButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        colors = ButtonDefaults.textButtonColors(contentColor = if (enabled) TextMid else TextMuted),
+    ) {
         Icon(icon, contentDescription = label, modifier = Modifier.size(15.dp))
         Spacer(Modifier.width(4.dp))
         Text(label, fontSize = 12.sp)

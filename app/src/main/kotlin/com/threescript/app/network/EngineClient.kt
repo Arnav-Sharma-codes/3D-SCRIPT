@@ -15,6 +15,7 @@ import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.nio.file.Files
 import java.nio.file.Paths
 
 /**
@@ -51,7 +52,7 @@ class EngineClient(private val state: AppState) {
         val engineJar = findEngineJar()
         log.info("Starting engine from: $engineJar")
 
-        val process = ProcessBuilder("java", "-jar", engineJar)
+        val process = ProcessBuilder(javaExecutable(), "-jar", engineJar)
             .apply {
                 environment()["GEMINI_API_KEY"] = state.geminiApiKey
                 environment()["GEMINI_MODEL"]   = state.geminiModel
@@ -91,6 +92,16 @@ class EngineClient(private val state: AppState) {
     }
 
     private fun findEngineJar(): String {
+        // Packaged desktop distributions carry the engine inside the app JAR.
+        // Materialize it once as a file because `java -jar` cannot run a classpath
+        // resource directly.
+        EngineClient::class.java.getResourceAsStream("/engine.jar")?.use { input ->
+            val extractedJar = Files.createTempFile("3dscript-engine-", ".jar").toFile()
+            extractedJar.deleteOnExit()
+            extractedJar.outputStream().use(input::copyTo)
+            return extractedJar.absolutePath
+        }
+
         // Look for engine JAR relative to this process's working directory
         val candidates = listOf(
             "engine/build/libs/engine-all.jar",
@@ -103,6 +114,12 @@ class EngineClient(private val state: AppState) {
             ?: throw IllegalStateException(
                 "Engine JAR not found. Run: gradle :engine:jar\nSearched: $candidates"
             )
+    }
+
+    private fun javaExecutable(): String {
+        val executableName = if (System.getProperty("os.name").startsWith("Windows")) "java.exe" else "java"
+        val bundledJava = Paths.get(System.getProperty("java.home"), "bin", executableName).toFile()
+        return if (bundledJava.canExecute()) bundledJava.absolutePath else executableName
     }
 
     // ── API calls ─────────────────────────────────────────────────────────────

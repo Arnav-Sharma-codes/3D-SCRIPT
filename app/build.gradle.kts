@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.gradle.language.jvm.tasks.ProcessResources
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -23,6 +24,16 @@ dependencies {
     implementation(libs.kotlinx.coroutines.swing)
     implementation(libs.pdfbox)
     implementation(libs.logback)
+}
+
+// The desktop application launches the engine as a separate local process.
+// Include its executable fat JAR in every packaged app instead of requiring a
+// checkout (and Gradle) on a reviewer's machine.
+tasks.named<ProcessResources>("processResources") {
+    dependsOn(":engine:jar")
+    from(project(":engine").layout.buildDirectory.file("libs/engine.jar")) {
+        rename { "engine.jar" }
+    }
 }
 
 compose.desktop {
