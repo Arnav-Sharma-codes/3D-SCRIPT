@@ -171,7 +171,7 @@ private fun TopBar(state: AppState, client: EngineClient, scope: CoroutineScope)
             EngineStatusBadge(state.engineReady)
 
             // Action buttons
-            TopBarButton("Sample", Icons.Default.Article) {
+            TopBarButton("Sample", Icons.Default.Description) {
                 state.scriptText = SAMPLE_SCRIPT
                 state.projectTitle = "The Fracture Line"
                 state.track = null
@@ -249,11 +249,15 @@ private fun TopBarButton(
     TextButton(
         onClick = onClick,
         enabled = enabled,
-        colors = ButtonDefaults.textButtonColors(contentColor = if (enabled) TextMid else TextMuted),
+        shape = RoundedCornerShape(6.dp),
+        colors = ButtonDefaults.textButtonColors(
+            contentColor = TextMid,
+            disabledContentColor = TextMuted.copy(alpha = 0.35f),
+        ),
     ) {
         Icon(icon, contentDescription = label, modifier = Modifier.size(15.dp))
-        Spacer(Modifier.width(4.dp))
-        Text(label, fontSize = 12.sp)
+        Spacer(Modifier.width(6.dp))
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 
