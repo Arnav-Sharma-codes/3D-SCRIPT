@@ -16,15 +16,23 @@ import com.threescript.shared.model.SceneBlock
  */
 object NarrativeParser {
 
-    // Fountain + extended slugline regex
+    // Robust slugline regex supporting industry-standard screenplay formats,
+    // messy PDF conversions, leading/trailing scene numbers, and split prefixes.
     private val SLUGLINE = Regex(
-        pattern = """(?m)^[ \t]*(?:INT\./EXT\.|I/E\.|INT\.|EXT\.|INTERIOR|EXTERIOR|SCENE\s+\d+|#\d+|\d+\.\s+[A-Z]).*$""",
-        options = setOf(RegexOption.IGNORE_CASE),
+        pattern = """(?im)^[ \t]*(?:(?:\d+[A-Z]?|[#\[]\d+[\]]?)\s+)?(?:INT\.\s*/\s*EXT\.|EXT\.\s*/\s*INT\.|INT\s*/\s*EXT\.?|EXT\s*/\s*INT\.?|/EXT\.|/INT\.|I/E\.?|INT\.|EXT\.|INTERIOR|EXTERIOR|SCENE\s+\d+|#\d+|\d+\.\s+[A-Z]).*${'$'}""",
     )
     private val ACT_HEADING = Regex(
-        """(?im)^[ \t]*ACT[ \t]+(ONE|TWO|THREE|VIII|VII|VI|IV|V|III|II|I|IX|X|[0-9]+)(?:[ \t]*[:—-].*)?[ \t]*$"""
+        """(?im)^[ \t]*ACT[ \t]+(ONE|TWO|THREE|VIII|VII|VI|IV|V|III|II|I|IX|X|[0-9]+)(?:[ \t]*[:—-].*)?[ \t]*${'$'}"""
     )
     private val NUMBERED_HEADING = Regex("""(?m)^\s*(\d+)[.\)]\s+(.+)$""")
+
+    // Normalizes messy sluglines like "/EXT. VAN" -> "INT./EXT. VAN"
+    private val LEADING_SCENE_NUM = Regex("""^\s*(?:\d+[A-Z]?|[#\[]\d+[\]]?|[0-9]+)[\.\)\s\t\-]+""")
+    private val TRAILING_SCENE_NUM = Regex("""\s+(?:\d+[A-Z]?|[#\[]\d+[\]]?|[0-9]+)\s*${'$'}""")
+    private val SLASH_EXT_FIX = Regex("""^/EXT\b\.?""", RegexOption.IGNORE_CASE)
+    private val SLASH_INT_FIX = Regex("""^/INT\b\.?""", RegexOption.IGNORE_CASE)
+    private val INT_EXT_VARIANTS = Regex("""^(?:INT\.\s*/\s*EXT\.|INT\s*/\s*EXT\.?|EXT\.\s*/\s*INT\.|EXT\s*/\s*INT\.?)\s*""", RegexOption.IGNORE_CASE)
+    private val STANDARD_PREFIXES = Regex("""^(?:I/E\.?|INT\.|EXT\.|INTERIOR|EXTERIOR)\s*""", RegexOption.IGNORE_CASE)
 
     /**
      * Parse raw text into an ordered list of [SceneBlock]s.
@@ -43,26 +51,86 @@ object NarrativeParser {
         }
     }
 
-    // ── Strategy 1: Fountain sluglines ────────────────────────────────────────
+    // ── Strategy 1: Fountain & production sluglines ───────────────────────────
 
     private fun parseBySluglines(text: String): List<SceneBlock> {
         val matches = SLUGLINE.findAll(text).toList()
         if (matches.isEmpty()) return parseByParagraphs(text)
         val blocks = mutableListOf<SceneBlock>()
+
+        // Check if there is meaningful story / prologue text before the first slugline
+        val firstStart = matches[0].range.first
+        if (firstStart > 0) {
+            val prologue = text.substring(0, firstStart).trim()
+            // Ignore trivial title pages or author metadata, but preserve genuine opening scenes
+            if (isSubstantiveSceneContent(prologue)) {
+                val prologueTitle = extractPrologueTitle(prologue)
+                blocks += SceneBlock(
+                    index = 1,
+                    title = prologueTitle,
+                    rawText = prologue,
+                )
+            }
+        }
+
         matches.forEachIndexed { i, match ->
             val start = match.range.first
             val nextSceneStart = if (i + 1 < matches.size) matches[i + 1].range.first else text.length
             val body = ACT_HEADING.replace(text.substring(start, nextSceneStart), "").trim()
-            val title = match.value.trim()
-                .replace(Regex("^(INT\\.|EXT\\.|INT\\./EXT\\.|I/E\\.)\\s*", RegexOption.IGNORE_CASE), "")
-                .take(80)
+            val rawSlug = match.value.trim()
+            val title = cleanSceneTitle(rawSlug)
+            val sceneIndex = blocks.size + 1
             blocks += SceneBlock(
-                index = i + 1,
-                title = title.ifBlank { "Scene ${i + 1}" },
+                index = sceneIndex,
+                title = title.ifBlank { "Scene $sceneIndex" },
                 rawText = body,
             )
         }
         return blocks
+    }
+
+    /**
+     * Cleans and normalizes a raw matched slugline into a professional scene title.
+     * - Fixes messy "/EXT. VAN" -> "INT./EXT. VAN"
+     * - Strips leading & trailing scene numbers (e.g. "1 EXT. CONCERT - NIGHT 1" -> "EXT. CONCERT - NIGHT")
+     * - Retains slugline context (INT. / EXT. / INT./EXT.) so writers know the environment.
+     */
+    fun cleanSceneTitle(raw: String): String {
+        var s = raw.trim()
+        // Strip leading scene number: "1 INT. ..." -> "INT. ..."
+        s = LEADING_SCENE_NUM.replace(s, "").trim()
+        // Strip trailing scene number: "INT. ... 1" -> "INT. ..."
+        s = TRAILING_SCENE_NUM.replace(s, "").trim()
+
+        // Fix broken "/EXT. VAN" or "/INT."
+        if (SLASH_EXT_FIX.containsMatchIn(s)) {
+            s = SLASH_EXT_FIX.replace(s, "INT./EXT.")
+        } else if (SLASH_INT_FIX.containsMatchIn(s)) {
+            s = SLASH_INT_FIX.replace(s, "INT./EXT.")
+        } else if (INT_EXT_VARIANTS.containsMatchIn(s)) {
+            s = INT_EXT_VARIANTS.replace(s, "INT./EXT. ")
+        }
+
+        return s.take(80).trim()
+    }
+
+    private fun isSubstantiveSceneContent(text: String): Boolean {
+        if (text.length < 35) return false
+        val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
+        // If it's just "TITLE" and "by AUTHOR", skip title page
+        if (lines.size <= 2 && lines.any { it.startsWith("by ", ignoreCase = true) || it.startsWith("written by", ignoreCase = true) }) {
+            return false
+        }
+        return true
+    }
+
+    private fun extractPrologueTitle(prologue: String): String {
+        val firstLine = prologue.lines().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+        return if (firstLine.length in 4..60 && firstLine.all { it.isLetterOrDigit() || it.isWhitespace() || it in "-:–" }) {
+            firstLine.uppercase()
+        } else {
+            "OPENING / PROLOGUE"
+        }
     }
 
     // ── Strategy 2: Numbered headings ─────────────────────────────────────────
