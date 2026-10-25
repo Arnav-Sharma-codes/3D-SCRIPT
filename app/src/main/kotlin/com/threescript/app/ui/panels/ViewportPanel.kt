@@ -15,6 +15,9 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -48,6 +51,10 @@ internal fun ViewportPanel(
 
     Column(modifier.background(BgBase)) {
         TrajectoryHeader()
+
+        if (track != null) {
+            WriterExecutiveSummary(track = track, onSelectPoint = selectPoint)
+        }
 
         Row(Modifier.weight(0.58f).fillMaxWidth()) {
             Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -347,14 +354,16 @@ private fun drawAxisLine(
 
 @Composable
 private fun SceneInspector(point: VectorPoint?, track: NarrativeTrack?, modifier: Modifier = Modifier) {
+    var inspectorHelp by remember { mutableStateOf<String?>(null) }
+
     Column(
-        modifier.background(BgBase).verticalScroll(rememberScrollState()).padding(18.dp),
+        modifier.background(BgBase).verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (point == null) {
             Eyebrow(if (track == null) "SCENE INSPECTOR" else "NO SCENE SELECTED")
             Text(
-                if (track == null) "Analyze a screenplay to explore its scene trajectory." else "Select a scene point to inspect its narrative scores.",
+                if (track == null) "Analyze a screenplay to explore its scene trajectory." else "Click any scene point in the 3D graph or list to inspect its narrative diagnostic.",
                 color = TextMid, fontSize = 12.sp, lineHeight = 18.sp,
             )
             return@Column
@@ -365,32 +374,104 @@ private fun SceneInspector(point: VectorPoint?, track: NarrativeTrack?, modifier
             Spacer(Modifier.weight(1f))
             SmallTag(point.storyPhase, parseHexColor(point.storyColor))
         }
-        Text(point.sceneTitle, color = TextHigh, fontSize = 17.sp, fontWeight = FontWeight.Bold, lineHeight = 21.sp)
-        Text(point.sceneSummary, color = TextMid, fontSize = 11.sp, lineHeight = 16.sp)
-        if (point.isDeadZone) SmallTag("DEAD ZONE", FlagDead)
+        Text(point.sceneTitle, color = TextHigh, fontSize = 16.sp, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
+        Text(point.sceneSummary, color = TextMid, fontSize = 11.sp, lineHeight = 15.sp)
+        if (point.isDeadZone) SmallTag("LOW MOVEMENT / DRAG", FlagDead)
+
+        if (inspectorHelp != null) {
+            Surface(
+                color = BgCard,
+                border = BorderStroke(1.dp, Brand.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(4.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(inspectorHelp.orEmpty(), color = TextHigh, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { inspectorHelp = null }, modifier = Modifier.size(18.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextMuted, modifier = Modifier.size(12.dp))
+                    }
+                }
+            }
+        }
 
         HorizontalRule()
-        ScoreBar("Plot progression", point.x, AxisPlot)
-        ScoreBar("Character arc", point.y, AxisChar)
-        ScoreBar("Emotional flux", point.z, AxisEmot)
+
+        // 1. Plot
+        val plotWord = when {
+            point.x >= 7.5 -> "Major Turning Point"
+            point.x >= 5.0 -> "Active Advancement"
+            else -> "Subdued / Setup"
+        }
+        ScoreBar(
+            dimension = "PLOT",
+            plainText = "$plotWord (${String.format("%.1f", point.x)}/10)",
+            value = point.x,
+            color = AxisPlot,
+            tag = "Gemini AI",
+            help = "Plot progression (X) scores how much external narrative stakes, story momentum, or action beats advance in this scene.",
+            onHelp = { inspectorHelp = it }
+        )
+
+        // 2. Character
+        val charWord = when {
+            point.y >= 7.0 -> "Major Transformation"
+            point.y >= 4.5 -> "Meaningful Shift"
+            else -> "Subtle Internal Beat"
+        }
+        ScoreBar(
+            dimension = "CHARACTER",
+            plainText = "$charWord (${String.format("%.1f", point.y)}/10)",
+            value = point.y,
+            color = AxisChar,
+            tag = "Gemini AI",
+            help = "Character arc (Y) scores internal evolution, psychological revelation, relationship shifts, or moral dilemma.",
+            onHelp = { inspectorHelp = it }
+        )
+
+        // 3. Tension / Emotion
+        val emotWord = when {
+            point.z >= 7.5 -> "Peak Tension & Stakes"
+            point.z >= 5.0 -> "Building Pressure"
+            else -> "Reflective / Quiet"
+        }
+        ScoreBar(
+            dimension = "TENSION",
+            plainText = "$emotWord (${String.format("%.1f", point.z)}/10)",
+            value = point.z,
+            color = AxisEmot,
+            tag = "Gemini AI",
+            help = "Emotional flux (Z) evaluates psychological tension, suspense, stakes, and narrative vulnerability.",
+            onHelp = { inspectorHelp = it }
+        )
+
+        // Narrative timeline
         val sceneCount = track?.summary?.sceneCount ?: point.sceneIndex
         val narrativeTime = narrativeTime(point, sceneCount)
-        ScoreBar("Narrative time", narrativeTime, AxisTime)
         Text(
-            "Scene ${point.sceneIndex} of $sceneCount · ${String.format("%.0f", narrativeTime * 10)}% through the screenplay",
+            "Position: Scene ${point.sceneIndex} of $sceneCount · ${String.format("%.0f", narrativeTime * 10)}% through script",
             color = TextMuted,
             fontSize = 9.sp,
         )
 
         if (point.deltaD > 0.0) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Movement from previous scene", color = TextMuted, fontSize = 10.sp)
-                Text(String.format("%.2f", point.deltaD), color = TextHigh, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            val movWord = when {
+                point.isDeadZone -> "Slow / Drag"
+                point.deltaD >= 3.0 -> "Dynamic Narrative Turn"
+                else -> "Steady Progression"
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Movement from previous", color = TextMuted, fontSize = 10.sp)
+                    Spacer(Modifier.width(4.dp))
+                    SmallTag("Rule Engine", BorderStrong)
+                }
+                Text("$movWord (${String.format("%.2f", point.deltaD)})", color = if (point.isDeadZone) FlagDead else TextHigh, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
             }
         }
+
         if (point.pacingNote.isNotBlank()) {
             HorizontalRule()
-            Eyebrow("STORY DOCTOR")
+            Eyebrow("STORY DOCTOR DIAGNOSTIC")
             Text(point.beatType, color = TextHigh, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             Text(point.pacingNote, color = TextMid, fontSize = 10.sp, lineHeight = 15.sp)
         }
@@ -399,22 +480,101 @@ private fun SceneInspector(point: VectorPoint?, track: NarrativeTrack?, modifier
 
 @Composable
 private fun TrackMetrics(track: NarrativeTrack?) {
-    Row(Modifier.fillMaxWidth().height(74.dp).background(BgSurface)) {
-        MetricCell("SCENES", track?.summary?.sceneCount?.toString() ?: "—", "one point per scene", Modifier.weight(1f))
-        MetricCell("SCENE MOVEMENT", track?.let { String.format("%.1f", it.summary.totalDistance) } ?: "—", "3D score distance", Modifier.weight(1f))
-        MetricCell("LOW-MOVEMENT SCENES", track?.summary?.deadZoneCount?.toString() ?: "—", "below threshold", Modifier.weight(1f))
-        MetricCell("CLIMAX", track?.summary?.climaxSceneIndex?.let { "Scene $it" } ?: "—", "highest plot + emotion", Modifier.weight(1f))
+    var activeHelp by remember { mutableStateOf<String?>(null) }
+
+    Column {
+        if (activeHelp != null) {
+            Surface(
+                color = BgCard,
+                border = BorderStroke(1.dp, Brand.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(4.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = Brand, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(activeHelp.orEmpty(), color = TextHigh, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { activeHelp = null }, modifier = Modifier.size(20.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextMuted, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+        }
+
+        Row(Modifier.fillMaxWidth().height(74.dp).background(BgSurface)) {
+            val sceneCount = track?.summary?.sceneCount ?: 0
+            val deadZones = track?.summary?.deadZoneCount ?: 0
+            val deadPct = if (sceneCount <= 0) 0 else (deadZones.toDouble() / sceneCount * 100).toInt()
+            val climaxIdx = track?.summary?.climaxSceneIndex
+            val climaxPct = if (sceneCount <= 1 || climaxIdx == null) 0 else ((climaxIdx - 1).toDouble() / (sceneCount - 1) * 100).toInt()
+
+            MetricCell(
+                label = "OVERALL PACING",
+                value = track?.summary?.pacingRating?.split(" ")?.take(2)?.joinToString(" ") ?: "—",
+                detail = track?.let { "Velocity ${String.format("%.1f", it.summary.meanVelocity)} · Rule engine" } ?: "3D score movement",
+                helpText = "Pacing velocity calculates average 3D Euclidean movement per scene across Plot, Character, and Emotion using our internal algorithmic engine.",
+                onHelpClick = { activeHelp = it },
+                modifier = Modifier.weight(1.15f),
+            )
+            MetricCell(
+                label = "LOW MOVEMENT",
+                value = track?.let { "$deadZones scenes ($deadPct%)" } ?: "—",
+                detail = "Slowest ~14% · Rule engine",
+                helpText = "Identifies quiet or stalling transitions where plot, character, and tension advance minimally. Calculated adaptively via 14th percentile threshold.",
+                onHelpClick = { activeHelp = it },
+                modifier = Modifier.weight(1f),
+            )
+            MetricCell(
+                label = "DRAMATIC CLIMAX",
+                value = climaxIdx?.let { "Scene $it ($climaxPct%)" } ?: "—",
+                detail = track?.let { "Act III peak · Rule engine" } ?: "highest plot + emotion",
+                helpText = "Identifies the dramatic climax combining peak emotional tension, plot momentum, and third-act structural placement.",
+                onHelpClick = { activeHelp = it },
+                modifier = Modifier.weight(1.05f),
+            )
+            MetricCell(
+                label = "AI ANALYSIS",
+                value = track?.let { "$sceneCount Scenes" } ?: "—",
+                detail = "Scored · Gemini AI",
+                helpText = "Each scene is individually evaluated across 3 narrative dimensions by Google Gemini AI.",
+                onHelpClick = { activeHelp = it },
+                modifier = Modifier.weight(0.95f),
+            )
+        }
     }
 }
 
 @Composable
-private fun MetricCell(label: String, value: String, detail: String, modifier: Modifier = Modifier) {
+private fun MetricCell(
+    label: String,
+    value: String,
+    detail: String,
+    helpText: String,
+    onHelpClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
-        modifier.height(74.dp).border(BorderStroke(0.5.dp, BorderSubtle)).padding(horizontal = 16.dp, vertical = 9.dp),
+        modifier.height(74.dp).border(BorderStroke(0.5.dp, BorderSubtle)).padding(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Eyebrow(label)
-        Text(value, color = TextHigh, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Eyebrow(label)
+            Spacer(Modifier.width(4.dp))
+            Box(
+                Modifier
+                    .size(13.dp)
+                    .clip(RoundedCornerShape(6.5.dp))
+                    .background(BorderSubtle)
+                    .clickable { onHelpClick(helpText) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("?", color = TextMid, fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Text(value, color = TextHigh, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         Text(detail, color = TextMuted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -467,11 +627,157 @@ private fun SceneMap(
 }
 
 @Composable
-private fun ScoreBar(label: String, value: Double, color: Color) {
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+private fun WriterExecutiveSummary(
+    track: NarrativeTrack,
+    onSelectPoint: (VectorPoint) -> Unit,
+) {
+    val points = track.points
+    val summary = track.summary
+    if (points.isEmpty()) return
+
+    // 1. Pacing Drag analysis: find consecutive low movement runs
+    val deadZones = points.filter { it.isDeadZone }
+    val consecutiveRuns = mutableListOf<List<VectorPoint>>()
+    var currentRun = mutableListOf<VectorPoint>()
+    deadZones.forEach { pt ->
+        if (currentRun.isEmpty() || pt.sceneIndex == currentRun.last().sceneIndex + 1) {
+            currentRun.add(pt)
+        } else {
+            consecutiveRuns.add(currentRun)
+            currentRun = mutableListOf(pt)
+        }
+    }
+    if (currentRun.isNotEmpty()) consecutiveRuns.add(currentRun)
+    val longestRun = consecutiveRuns.maxByOrNull { it.size }
+
+    // 2. Climax Analysis
+    val climaxIndex = summary.climaxSceneIndex
+    val climaxPoint = points.find { it.sceneIndex == climaxIndex }
+    val climaxPct = if (summary.sceneCount <= 1) 100 else ((climaxIndex - 1).toDouble() / (summary.sceneCount - 1) * 100).toInt()
+
+    // 3. Peak Emotional Conflict
+    val peakEmotion = points.maxByOrNull { it.z }
+
+    Surface(
+        color = BgCard,
+        border = BorderStroke(1.dp, BorderSubtle),
+        shape = RoundedCornerShape(6.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+    ) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("💡 30-SECOND WRITER ACTION SUMMARY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Brand)
+                Spacer(Modifier.weight(1f))
+                Text("${summary.sceneCount} scenes analyzed", fontSize = 9.sp, color = TextMuted)
+            }
+
+            // Insight 1: Pacing / Drag
+            if (longestRun != null && longestRun.size >= 2) {
+                InsightRow(
+                    bulletColor = FlagDead,
+                    text = "Pacing Drag: Scenes ${longestRun.first().sceneIndex}–${longestRun.last().sceneIndex} show stalled momentum. Consider raising stakes or trimming.",
+                    actionLabel = "Inspect Scene ${longestRun.first().sceneIndex}",
+                    onClick = { onSelectPoint(longestRun.first()) }
+                )
+            } else if (deadZones.isNotEmpty()) {
+                val firstDz = deadZones.first()
+                InsightRow(
+                    bulletColor = Color(0xFFF59E0B),
+                    text = "Pacing: ${deadZones.size} low-movement transition(s) detected (${String.format("%.0f", deadZones.size.toDouble() / points.size * 100)}% of screenplay).",
+                    actionLabel = "Inspect Scene ${firstDz.sceneIndex}",
+                    onClick = { onSelectPoint(firstDz) }
+                )
+            } else {
+                InsightRow(
+                    bulletColor = Color(0xFF10B981),
+                    text = "Pacing Momentum: Consistent narrative progression throughout. Zero stalled transitions detected.",
+                    actionLabel = null,
+                    onClick = {}
+                )
+            }
+
+            // Insight 2: Climax Timing
+            if (climaxPoint != null) {
+                val (climaxColor, climaxMsg) = when {
+                    climaxPct < 70 -> Color(0xFFF59E0B) to "Climax Alert: Story climax peaks early at Scene $climaxIndex ($climaxPct% mark). Act III may lack momentum."
+                    climaxPct in 70..92 -> Color(0xFF10B981) to "Climax Anchor: Well-placed dramatic climax at Scene $climaxIndex ($climaxPct% mark in Act III)."
+                    else -> Color(0xFF06B6D4) to "Climax: Story climax culminates late at Scene $climaxIndex ($climaxPct% mark). Denouement is brief."
+                }
+                InsightRow(
+                    bulletColor = climaxColor,
+                    text = climaxMsg,
+                    actionLabel = "Inspect Scene $climaxIndex",
+                    onClick = { onSelectPoint(climaxPoint) }
+                )
+            }
+
+            // Insight 3: Peak Tension
+            if (peakEmotion != null && peakEmotion.sceneIndex != climaxIndex) {
+                InsightRow(
+                    bulletColor = AxisEmot,
+                    text = "Peak Conflict: Highest emotional stakes land at Scene ${peakEmotion.sceneIndex} (\"${peakEmotion.sceneTitle.take(28)}\").",
+                    actionLabel = "Inspect Scene ${peakEmotion.sceneIndex}",
+                    onClick = { onSelectPoint(peakEmotion) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InsightRow(
+    bulletColor: Color,
+    text: String,
+    actionLabel: String?,
+    onClick: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(bulletColor))
+        Spacer(Modifier.width(8.dp))
+        Text(text, fontSize = 11.sp, color = TextHigh, modifier = Modifier.weight(1f))
+        if (actionLabel != null) {
+            Spacer(Modifier.width(8.dp))
+            Surface(
+                color = Brand.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, Brand.copy(alpha = 0.4f)),
+                shape = RoundedCornerShape(4.dp),
+                modifier = Modifier.clickable { onClick() }
+            ) {
+                Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(actionLabel, color = Brand, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(2.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Brand, modifier = Modifier.size(10.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScoreBar(
+    dimension: String,
+    plainText: String,
+    value: Double,
+    color: Color,
+    tag: String,
+    help: String,
+    onHelp: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(label, color = TextMid, fontSize = 10.sp)
-            Text(String.format("%.1f", value), color = TextHigh, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(dimension, color = color, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(4.dp))
+                SmallTag(tag, BorderStrong)
+                Spacer(Modifier.width(4.dp))
+                Box(
+                    Modifier.size(12.dp).clip(RoundedCornerShape(6.dp)).background(BorderSubtle).clickable { onHelp(help) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("?", color = TextMid, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Text(plainText, color = TextHigh, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold)
         }
         Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(BorderSubtle)) {
             Box(Modifier.fillMaxWidth((value / 10.0).toFloat().coerceIn(0f, 1f)).fillMaxHeight().background(color).clip(RoundedCornerShape(2.dp)))
