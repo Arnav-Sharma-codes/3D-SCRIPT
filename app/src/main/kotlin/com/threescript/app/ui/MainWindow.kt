@@ -38,6 +38,10 @@ val AxisChar   = Color(0xFF10B981)    // Y — Character Development
 val AxisEmot   = Color(0xFF06B6D4)    // Z — Emotional Flux
 val AxisTime   = Color(0xFFE2E8F0)    // T — Scene order / narrative time
 val FlagDead   = Color(0xFFEF4444)
+val TokenSetupCyan       = Color(0xFF06B6D4) // Setup / Chekhov's Gun
+val TokenSubversionAmber = Color(0xFFF59E0B) // Subversion / Twist
+val TokenOverloadPurple  = Color(0xFFA855F7) // Cognitive Overload / Exposition
+val ExpectationGhost     = Color(0xFFF59E0B) // Audience Expectation Trajectory (Dashed)
 
 /**
  * MainWindow — root composable and application window.

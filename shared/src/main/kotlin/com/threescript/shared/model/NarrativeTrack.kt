@@ -1,5 +1,7 @@
 package com.threescript.shared.model
 
+import com.threescript.shared.model.cognitive.CognitiveHighlightToken
+import com.threescript.shared.model.cognitive.CognitiveTriadState
 import kotlinx.serialization.Serializable
 
 /**
@@ -9,15 +11,19 @@ import kotlinx.serialization.Serializable
  * The front-end treats this as read-only and renders it directly; no business
  * logic belongs in the front-end.
  *
- * @property points         Ordered list of 3D vector points, one per scene
- * @property summary        Aggregate narrative statistics
- * @property engineVersion  Semantic version of the engine that produced this track
+ * @property points           Ordered list of 3D vector points, one per scene
+ * @property summary          Aggregate narrative statistics
+ * @property engineVersion    Semantic version of the engine that produced this track
+ * @property cognitiveOverlay Simulated audience cognitive triad across temporal dimensions
+ * @property cognitiveTokens  Identified setup, subversion, and overload tokens in the text
  */
 @Serializable
 data class NarrativeTrack(
     val points: List<VectorPoint>,
     val summary: TrackSummary,
     val engineVersion: String = "1.0.0",
+    val cognitiveOverlay: List<CognitiveTriadState> = emptyList(),
+    val cognitiveTokens: List<CognitiveHighlightToken> = emptyList(),
 )
 
 /**

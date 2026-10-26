@@ -34,8 +34,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import com.threescript.app.AppState
 import com.threescript.app.ui.*
+import com.threescript.app.ui.components.CognitiveTriadCard
 import com.threescript.shared.model.NarrativeTrack
 import com.threescript.shared.model.VectorPoint
+import com.threescript.shared.model.cognitive.*
 import kotlin.math.*
 
 @Composable
@@ -58,7 +60,12 @@ internal fun ViewportPanel(
 
         Row(Modifier.weight(0.58f).fillMaxWidth()) {
             Column(Modifier.weight(1f).fillMaxHeight()) {
-                GraphToolbar(camera, onEnterFullscreen = onEnterFullscreen.takeIf { track != null })
+                GraphToolbar(
+                    camera = camera,
+                    cognitiveOverlayEnabled = state.cognitiveOverlayEnabled,
+                    onToggleCognitiveOverlay = { state.cognitiveOverlayEnabled = !state.cognitiveOverlayEnabled },
+                    onEnterFullscreen = onEnterFullscreen.takeIf { track != null },
+                )
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     if (track == null || points.isEmpty()) {
                         EmptyGraphState()
@@ -68,6 +75,8 @@ internal fun ViewportPanel(
                             selectedPoint = state.selectedPoint,
                             onPointSelected = selectPoint,
                             camera = camera,
+                            cognitiveOverlayEnabled = state.cognitiveOverlayEnabled,
+                            activeSplineTargetScene = state.activeSplineTargetScene,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -77,7 +86,12 @@ internal fun ViewportPanel(
             SceneInspector(
                 point = state.selectedPoint,
                 track = track,
-                modifier = Modifier.width(248.dp).fillMaxHeight(),
+                onJumpToScene = { targetIndex ->
+                    val target = track?.points?.find { it.sceneIndex == targetIndex }
+                    if (target != null) state.selectedPoint = target
+                },
+                onHoverCallbackScene = { state.activeSplineTargetScene = it },
+                modifier = Modifier.width(280.dp).fillMaxHeight(),
             )
         }
 
@@ -100,18 +114,37 @@ internal fun FullscreenGraphView(
     onPointSelected: (VectorPoint) -> Unit,
     onExitFullscreen: () -> Unit,
 ) {
+    var cognitiveOverlayEnabled by remember { mutableStateOf(true) }
+    var activeSplineTargetScene by remember { mutableStateOf<Int?>(null) }
+
     Column(Modifier.fillMaxSize().background(BgBase)) {
-        GraphToolbar(camera, onExitFullscreen = onExitFullscreen)
+        GraphToolbar(
+            camera = camera,
+            cognitiveOverlayEnabled = cognitiveOverlayEnabled,
+            onToggleCognitiveOverlay = { cognitiveOverlayEnabled = !cognitiveOverlayEnabled },
+            onExitFullscreen = onExitFullscreen,
+        )
         Row(Modifier.weight(1f).fillMaxWidth()) {
             Viewport3D(
                 track = track,
                 selectedPoint = selectedPoint,
                 onPointSelected = onPointSelected,
                 camera = camera,
+                cognitiveOverlayEnabled = cognitiveOverlayEnabled,
+                activeSplineTargetScene = activeSplineTargetScene,
                 modifier = Modifier.weight(1f).fillMaxHeight(),
             )
             VerticalRule()
-            SceneInspector(point = selectedPoint, track = track, modifier = Modifier.width(300.dp).fillMaxHeight())
+            SceneInspector(
+                point = selectedPoint,
+                track = track,
+                onJumpToScene = { targetIndex ->
+                    val target = track.points.find { it.sceneIndex == targetIndex }
+                    if (target != null) onPointSelected(target)
+                },
+                onHoverCallbackScene = { activeSplineTargetScene = it },
+                modifier = Modifier.width(300.dp).fillMaxHeight(),
+            )
         }
     }
 }
@@ -124,17 +157,18 @@ private fun TrajectoryHeader() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Eyebrow("STORY TRAJECTORY")
+            Eyebrow("STORY TRAJECTORY & AUDIENCE COGNITIVE OVERLAY")
             Text("The screenplay in vector space", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = TextHigh)
             Text(
-                "One point per scene: plot, character, and emotion plotted in story time.",
+                "3D spatial narrative trajectory with real-time audience expectation modeling.",
                 fontSize = 10.sp, color = TextMid, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             AxisLegend("Plot", AxisPlot)
             AxisLegend("Character Arc", AxisChar)
             AxisLegend("Emotion", AxisEmot)
+            AxisLegend("Expectation", ExpectationGhost)
             AxisLegend("Time", AxisTime)
         }
     }
@@ -143,6 +177,8 @@ private fun TrajectoryHeader() {
 @Composable
 private fun GraphToolbar(
     camera: GraphCamera,
+    cognitiveOverlayEnabled: Boolean = true,
+    onToggleCognitiveOverlay: (() -> Unit)? = null,
     onEnterFullscreen: (() -> Unit)? = null,
     onExitFullscreen: (() -> Unit)? = null,
 ) {
@@ -152,8 +188,25 @@ private fun GraphToolbar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("3D SCENE TRAJECTORY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextMuted)
+        Spacer(Modifier.width(10.dp))
+
+        if (onToggleCognitiveOverlay != null) {
+            Surface(
+                color = if (cognitiveOverlayEnabled) ExpectationGhost.copy(alpha = 0.16f) else Color.Transparent,
+                shape = RoundedCornerShape(4.dp),
+                border = BorderStroke(1.dp, if (cognitiveOverlayEnabled) ExpectationGhost.copy(alpha = 0.6f) else BorderSubtle),
+                modifier = Modifier.clickable { onToggleCognitiveOverlay() }
+            ) {
+                Row(Modifier.padding(horizontal = 6.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(if (cognitiveOverlayEnabled) ExpectationGhost else TextMuted))
+                    Spacer(Modifier.width(4.dp))
+                    Text("🧠 Expectation Vector", color = if (cognitiveOverlayEnabled) ExpectationGhost else TextMuted, fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
         Spacer(Modifier.weight(1f))
-        Text("Scenes advance along time · Drag to orbit · Click a point", fontSize = 9.sp, color = TextMuted)
+        Text("Drag to orbit · Scroll to zoom", fontSize = 9.sp, color = TextMuted)
         IconButton(onClick = { camera.zoom = (camera.zoom * 0.82f).coerceIn(0.45f, 3.2f) }, modifier = Modifier.size(30.dp)) {
             Icon(Icons.Default.ZoomOut, contentDescription = "Zoom out", tint = TextMid, modifier = Modifier.size(16.dp))
         }
@@ -182,6 +235,8 @@ private fun Viewport3D(
     selectedPoint: VectorPoint?,
     onPointSelected: (VectorPoint) -> Unit,
     camera: GraphCamera,
+    cognitiveOverlayEnabled: Boolean = true,
+    activeSplineTargetScene: Int? = null,
     modifier: Modifier = Modifier,
 ) {
     val points = track.points
@@ -273,6 +328,8 @@ private fun Viewport3D(
             }
             drawLine(AxisTime.copy(alpha = 0.7f), start - normal, start + normal, strokeWidth = 1f)
         }
+
+        // ── 1. Core Actual Plot Trajectory ─────────────────────────────────
         for (index in 1 until points.size) {
             val previous = points[index - 1]
             val current = points[index]
@@ -286,14 +343,95 @@ private fun Viewport3D(
             )
         }
 
+        // ── 2. Auxiliary Audience Expectation Vector Trajectory ─────────────
+        if (cognitiveOverlayEnabled && track.cognitiveOverlay.isNotEmpty()) {
+            val overlayByScene = track.cognitiveOverlay.associateBy { it.sceneIndex }
+            for (index in 1 until points.size) {
+                val prevPt = points[index - 1]
+                val currPt = points[index]
+                val prevExp = overlayByScene[prevPt.sceneIndex]?.anticipation?.expectationVector
+                val currExp = overlayByScene[currPt.sceneIndex]?.anticipation?.expectationVector
+                if (prevExp != null && currExp != null) {
+                    val startExpPos = projectPoint(prevExp.x, prevExp.y, prevExp.z, cx, cy, scale, camera.yaw, camera.pitch, narrativeTime(prevPt, points.size))
+                    val endExpPos = projectPoint(currExp.x, currExp.y, currExp.z, cx, cy, scale, camera.yaw, camera.pitch, narrativeTime(currPt, points.size))
+
+                    // Draw segmented dashed expectation line
+                    val dist = (endExpPos - startExpPos).getDistance()
+                    if (dist > 1f) {
+                        val dashLen = 7f
+                        val gapLen = 6f
+                        var d = 0f
+                        while (d < dist) {
+                            val t1 = (d / dist).coerceIn(0f, 1f)
+                            val t2 = ((d + dashLen) / dist).coerceIn(0f, 1f)
+                            val p1 = startExpPos + (endExpPos - startExpPos) * t1
+                            val p2 = startExpPos + (endExpPos - startExpPos) * t2
+                            drawLine(
+                                color = ExpectationGhost.copy(alpha = 0.72f),
+                                start = p1,
+                                end = p2,
+                                strokeWidth = 1.6f,
+                            )
+                            d += dashLen + gapLen
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── 3. Nodes and Divergence Tension Heatmap Halos ───────────────────
         points.forEach { point ->
             val position = projectPoint(point.x, point.y, point.z, cx, cy, scale, camera.yaw, camera.pitch, narrativeTime(point, points.size))
             val selected = point.sceneIndex == selectedPoint?.sceneIndex
             val pointColor = if (point.isDeadZone) FlagDead else parseHexColor(point.storyColor)
             val depth = (narrativeTime(point, points.size) / TIME_AXIS_MAX).toFloat()
             val radius = (if (selected) 6.5f else 4.8f) + depth * 2.2f
+
+            // Divergence Tension Heatmap halo
+            if (cognitiveOverlayEnabled) {
+                val triad = track.cognitiveOverlay.find { it.sceneIndex == point.sceneIndex }
+                if (triad != null && triad.anticipation.divergenceGap >= 1.5) {
+                    val haloColor = if (triad.anticipation.isSubversiveTwist) FlagDead else TokenSubversionAmber
+                    val haloRadius = radius * 2.4f + (triad.anticipation.divergenceGap.toFloat() * 1.5f)
+                    drawCircle(haloColor.copy(alpha = 0.22f), haloRadius, position)
+                    drawCircle(haloColor.copy(alpha = 0.10f), haloRadius * 1.6f, position)
+                }
+            }
+
             drawCircle(pointColor.copy(alpha = 0.55f + 0.45f * depth), radius, position)
             drawCircle(BgBase, radius * 0.42f, position)
+        }
+
+        // ── 4. 3D Parabolic Spline Link (Setup -> Callback Connection) ─────
+        if (activeSplineTargetScene != null) {
+            val setupPoint = points.find { it.sceneIndex == activeSplineTargetScene }
+            val currentPt = selectedPoint ?: points.find { pt ->
+                track.cognitiveTokens.any { it.originatingSceneIndex == activeSplineTargetScene && it.sceneIndex == pt.sceneIndex }
+            } ?: points.lastOrNull()
+
+            if (setupPoint != null && currentPt != null && setupPoint.sceneIndex != currentPt.sceneIndex) {
+                val p1 = projectPoint(setupPoint.x, setupPoint.y, setupPoint.z, cx, cy, scale, camera.yaw, camera.pitch, narrativeTime(setupPoint, points.size))
+                val p2 = projectPoint(currentPt.x, currentPt.y, currentPt.z, cx, cy, scale, camera.yaw, camera.pitch, narrativeTime(currentPt, points.size))
+
+                val segments = 24
+                var lastArcPos = p1
+                for (step in 1..segments) {
+                    val t = step / segments.toFloat()
+                    val linear = p1 + (p2 - p1) * t
+                    val arcHeight = sin(t * Math.PI.toFloat()) * 65f * camera.zoom
+                    val arcPos = Offset(linear.x, linear.y - arcHeight)
+
+                    drawLine(
+                        color = TokenSetupCyan.copy(alpha = 0.85f),
+                        start = lastArcPos,
+                        end = arcPos,
+                        strokeWidth = 2.4f,
+                    )
+                    lastArcPos = arcPos
+                }
+                drawCircle(TokenSetupCyan, 6f, p1)
+                drawCircle(TokenSubversionAmber, 7f, p2)
+            }
         }
     }
         if (canvasSize != IntSize.Zero) {
@@ -353,7 +491,13 @@ private fun drawAxisLine(
 }
 
 @Composable
-private fun SceneInspector(point: VectorPoint?, track: NarrativeTrack?, modifier: Modifier = Modifier) {
+private fun SceneInspector(
+    point: VectorPoint?,
+    track: NarrativeTrack?,
+    onJumpToScene: (Int) -> Unit = {},
+    onHoverCallbackScene: (Int?) -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     var inspectorHelp by remember { mutableStateOf<String?>(null) }
 
     Column(
@@ -475,6 +619,14 @@ private fun SceneInspector(point: VectorPoint?, track: NarrativeTrack?, modifier
             Text(point.beatType, color = TextHigh, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             Text(point.pacingNote, color = TextMid, fontSize = 10.sp, lineHeight = 15.sp)
         }
+
+        val triadState = track?.cognitiveOverlay?.find { it.sceneIndex == point.sceneIndex }
+        HorizontalRule()
+        CognitiveTriadCard(
+            triadState = triadState,
+            onJumpToScene = onJumpToScene,
+            onHoverCallbackScene = onHoverCallbackScene,
+        )
     }
 }
 
@@ -806,12 +958,12 @@ private fun Eyebrow(text: String) {
 }
 
 @Composable
-private fun HorizontalRule() {
+internal fun HorizontalRule() {
     Box(Modifier.fillMaxWidth().height(1.dp).background(BorderSubtle))
 }
 
 @Composable
-private fun VerticalRule() {
+internal fun VerticalRule() {
     Box(Modifier.width(1.dp).fillMaxHeight().background(BorderSubtle))
 }
 

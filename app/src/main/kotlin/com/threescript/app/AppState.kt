@@ -35,6 +35,12 @@ class AppState {
     var selectedPoint: VectorPoint? by mutableStateOf(null)
     var selectedTab: Int by mutableStateOf(0)  // 0=3D viewport, 1=beat cards
 
+    // ── Audience Predictive Cognitive Overlay ─────────────────────────────────
+    var cognitiveOverlayEnabled: Boolean by mutableStateOf(true)
+    var activeSplineTargetScene: Int? by mutableStateOf(null)
+    var hoveredTokenText: String? by mutableStateOf(null)
+    var scriptViewMode: Int by mutableStateOf(0) // 0=Raw Script Editor, 1=Cognitive Highlight Overlay
+
     // ── Settings ──────────────────────────────────────────────────────────────
     var geminiApiKey: String by mutableStateOf(System.getenv("GEMINI_API_KEY") ?: envFile["GEMINI_API_KEY"].orEmpty())
     var geminiModel: String by mutableStateOf(System.getenv("GEMINI_MODEL") ?: envFile["GEMINI_MODEL"] ?: "gemini-3.6-flash")

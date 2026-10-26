@@ -89,6 +89,7 @@ fun Application.configureRoutes() {
                 NarrativeMetrics.buildTrack(
                     rawPoints = rawPoints,
                     deadZoneThreshold = req.deadZoneThreshold,
+                    scenes = req.scenes,
                 )
             }.getOrElse { e ->
                 log.error("Metrics computation failed: ${e.message}", e)

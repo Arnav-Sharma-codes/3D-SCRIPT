@@ -1,5 +1,7 @@
 package com.threescript.engine.metrics
 
+import com.threescript.engine.cognitive.AudienceCognitiveEngine
+import com.threescript.engine.cognitive.CognitiveTokenMatcher
 import com.threescript.engine.regression.LinearRegression
 import com.threescript.shared.model.*
 import kotlin.math.*
@@ -10,13 +12,24 @@ object NarrativeMetrics {
     fun buildTrack(
         rawPoints: List<VectorPoint>,
         deadZoneThreshold: Double? = null,
+        scenes: List<SceneBlock>? = null,
     ): NarrativeTrack {
         if (rawPoints.isEmpty()) return NarrativeTrack(emptyList(), emptyTrackSummary())
 
         val exactScores = rawPoints.map { it.copy(x = it.xRaw, y = it.yRaw, z = it.zRaw) }
         val withDelta = computeDeltasWithAdaptiveThreshold(exactScores, deadZoneThreshold)
         val enriched = enrichDramaticMetadata(withDelta)
-        return NarrativeTrack(points = enriched, summary = buildSummary(enriched))
+
+        val blocks = scenes ?: rawPoints.map { SceneBlock(it.sceneIndex, it.sceneTitle, it.sceneSummary) }
+        val cognitiveTokens = CognitiveTokenMatcher.matchTokens(blocks)
+        val cognitiveOverlay = AudienceCognitiveEngine.generateOverlay(enriched, blocks, cognitiveTokens)
+
+        return NarrativeTrack(
+            points = enriched,
+            summary = buildSummary(enriched),
+            cognitiveOverlay = cognitiveOverlay,
+            cognitiveTokens = cognitiveTokens,
+        )
     }
 
     /**
