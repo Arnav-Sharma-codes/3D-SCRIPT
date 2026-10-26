@@ -55,7 +55,14 @@ internal fun ViewportPanel(
         TrajectoryHeader()
 
         if (track != null) {
-            WriterExecutiveSummary(track = track, onSelectPoint = selectPoint)
+            WriterExecutiveSummary(
+                track = track,
+                onSelectPoint = selectPoint,
+                onScrollToScene = { idx ->
+                    state.scriptScrollTarget = idx
+                    state.scriptViewMode = 0
+                },
+            )
         }
 
         Row(Modifier.weight(0.58f).fillMaxWidth()) {
@@ -157,7 +164,7 @@ private fun TrajectoryHeader() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Eyebrow("STORY TRAJECTORY & AUDIENCE COGNITIVE OVERLAY")
+            Eyebrow("STORY TRAJECTORY · AUDIENCE COGNITIVE OVERLAY")
             Text("The screenplay in vector space", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = TextHigh)
             Text(
                 "3D spatial narrative trajectory with real-time audience expectation modeling.",
@@ -656,7 +663,7 @@ private fun TrackMetrics(track: NarrativeTrack?) {
             }
         }
 
-        Row(Modifier.fillMaxWidth().height(74.dp).background(BgSurface)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).background(BgSurface)) {
             val sceneCount = track?.summary?.sceneCount ?: 0
             val deadZones = track?.summary?.deadZoneCount ?: 0
             val deadPct = if (sceneCount <= 0) 0 else (deadZones.toDouble() / sceneCount * 100).toInt()
@@ -709,7 +716,7 @@ private fun MetricCell(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.height(74.dp).border(BorderStroke(0.5.dp, BorderSubtle)).padding(horizontal = 14.dp, vertical = 8.dp),
+        modifier.border(BorderStroke(0.5.dp, BorderSubtle)).padding(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.Center,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -726,7 +733,7 @@ private fun MetricCell(
                 Text("?", color = TextMid, fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
             }
         }
-        Text(value, color = TextHigh, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(value, color = TextHigh, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2, lineHeight = 17.sp, overflow = TextOverflow.Ellipsis)
         Text(detail, color = TextMuted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -782,6 +789,7 @@ private fun SceneMap(
 private fun WriterExecutiveSummary(
     track: NarrativeTrack,
     onSelectPoint: (VectorPoint) -> Unit,
+    onScrollToScene: (Int) -> Unit = {},
 ) {
     val points = track.points
     val summary = track.summary
@@ -829,7 +837,10 @@ private fun WriterExecutiveSummary(
                     bulletColor = FlagDead,
                     text = "Pacing Drag: Scenes ${longestRun.first().sceneIndex}–${longestRun.last().sceneIndex} show stalled momentum. Consider raising stakes or trimming.",
                     actionLabel = "Inspect Scene ${longestRun.first().sceneIndex}",
-                    onClick = { onSelectPoint(longestRun.first()) }
+                    onClick = {
+                        onSelectPoint(longestRun.first())
+                        onScrollToScene(longestRun.first().sceneIndex)
+                    }
                 )
             } else if (deadZones.isNotEmpty()) {
                 val firstDz = deadZones.first()
@@ -837,7 +848,10 @@ private fun WriterExecutiveSummary(
                     bulletColor = Color(0xFFF59E0B),
                     text = "Pacing: ${deadZones.size} low-movement transition(s) detected (${String.format("%.0f", deadZones.size.toDouble() / points.size * 100)}% of screenplay).",
                     actionLabel = "Inspect Scene ${firstDz.sceneIndex}",
-                    onClick = { onSelectPoint(firstDz) }
+                    onClick = {
+                        onSelectPoint(firstDz)
+                        onScrollToScene(firstDz.sceneIndex)
+                    }
                 )
             } else {
                 InsightRow(
@@ -859,7 +873,10 @@ private fun WriterExecutiveSummary(
                     bulletColor = climaxColor,
                     text = climaxMsg,
                     actionLabel = "Inspect Scene $climaxIndex",
-                    onClick = { onSelectPoint(climaxPoint) }
+                    onClick = {
+                        onSelectPoint(climaxPoint)
+                        onScrollToScene(climaxIndex)
+                    }
                 )
             }
 
@@ -869,7 +886,10 @@ private fun WriterExecutiveSummary(
                     bulletColor = AxisEmot,
                     text = "Peak Conflict: Highest emotional stakes land at Scene ${peakEmotion.sceneIndex} (\"${peakEmotion.sceneTitle.take(28)}\").",
                     actionLabel = "Inspect Scene ${peakEmotion.sceneIndex}",
-                    onClick = { onSelectPoint(peakEmotion) }
+                    onClick = {
+                        onSelectPoint(peakEmotion)
+                        onScrollToScene(peakEmotion.sceneIndex)
+                    }
                 )
             }
         }

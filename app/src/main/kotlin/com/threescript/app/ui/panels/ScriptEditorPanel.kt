@@ -29,6 +29,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import com.threescript.shared.model.cognitive.CognitiveHighlightToken
 import com.threescript.shared.model.cognitive.CognitiveTokenType
+import kotlinx.coroutines.launch
 
 /**
  * ScriptEditorPanel — left-pane screenplay editor.
@@ -126,6 +127,38 @@ fun ScriptEditorPanel(
                 CognitiveScriptOverlayView(state)
             } else {
                 val scroll = rememberScrollState()
+                val coroutineScope = rememberCoroutineScope()
+
+                // Scroll to scene when scriptScrollTarget is set
+                LaunchedEffect(state.scriptScrollTarget) {
+                    val targetScene = state.scriptScrollTarget ?: return@LaunchedEffect
+                    state.scriptScrollTarget = null  // consume
+
+                    // Find the line offset by counting scene headings up to targetScene
+                    // A scene heading is: INT./EXT. or just INT. or EXT. at line start
+                    val lines = state.scriptText.lines()
+                    val headingRegex = Regex(
+                        """^(INT\.?/EXT\.?|EXT\.?/INT\.?|INT\.|EXT\.|I/E\.|I\.?/E\.?)\s""",
+                        RegexOption.IGNORE_CASE
+                    )
+                    var sceneCounter = 0
+                    var charOffset = 0
+                    for (line in lines) {
+                        if (headingRegex.containsMatchIn(line)) {
+                            sceneCounter++
+                            if (sceneCounter >= targetScene) break
+                        }
+                        charOffset += line.length + 1 // +1 for \n
+                    }
+
+                    // Map char offset to approximate pixel scroll position
+                    // 20sp line height at ~1.5x density ≈ 30px; each char ~7.8px wide monospace
+                    // We use line number to estimate vertical scroll
+                    val lineNumber = state.scriptText.substring(0, charOffset.coerceAtMost(state.scriptText.length)).count { it == '\n' }
+                    val estimatedPx = (lineNumber * 20).coerceAtLeast(0)
+                    coroutineScope.launch { scroll.animateScrollTo(estimatedPx) }
+                }
+
                 BasicTextField(
                     value = state.scriptText,
                     onValueChange = { state.scriptText = it },

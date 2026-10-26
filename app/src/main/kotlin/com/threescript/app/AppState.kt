@@ -41,6 +41,10 @@ class AppState {
     var hoveredTokenText: String? by mutableStateOf(null)
     var scriptViewMode: Int by mutableStateOf(0) // 0=Raw Script Editor, 1=Cognitive Highlight Overlay
 
+    // ── Script navigation ─────────────────────────────────────────────────────
+    // When set, ScriptEditorPanel scrolls to this scene index then clears itself
+    var scriptScrollTarget: Int? by mutableStateOf(null)
+
     // ── Settings ──────────────────────────────────────────────────────────────
     var geminiApiKey: String by mutableStateOf(System.getenv("GEMINI_API_KEY") ?: envFile["GEMINI_API_KEY"].orEmpty())
     var geminiModel: String by mutableStateOf(System.getenv("GEMINI_MODEL") ?: envFile["GEMINI_MODEL"] ?: "gemini-3.6-flash")
