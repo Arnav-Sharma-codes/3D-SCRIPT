@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
 import com.threescript.app.ui.*
 import com.threescript.shared.model.cognitive.*
 
@@ -59,8 +60,16 @@ fun CognitiveTriadCard(
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🧠 AUDIENCE COGNITIVE OVERLAY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Brand)
-                Spacer(Modifier.weight(1f))
+                Text(
+                    "🧠 COGNITIVE OVERLAY",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Brand,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.width(6.dp))
                 CognitiveStateBadge(triadState.perception.audienceMentalState)
             }
 
@@ -91,14 +100,14 @@ fun CognitiveTriadCard(
                 }
             }
 
-            // 3 Temporal Dimension Tabs
+            // 3 Temporal Dimension Tabs — short labels to prevent wrapping
             Row(
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(BgBase).padding(2.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                TemporalTabButton("⏪ Past (Recall)", selectedTemporalTab == 0, Modifier.weight(1f)) { selectedTemporalTab = 0 }
-                TemporalTabButton("👁️ Present (Sense)", selectedTemporalTab == 1, Modifier.weight(1f)) { selectedTemporalTab = 1 }
-                TemporalTabButton("🔮 Future (Expect)", selectedTemporalTab == 2, Modifier.weight(1f)) { selectedTemporalTab = 2 }
+                TemporalTabButton("⏪ Recall", selectedTemporalTab == 0, Modifier.weight(1f)) { selectedTemporalTab = 0 }
+                TemporalTabButton("👁 Sense", selectedTemporalTab == 1, Modifier.weight(1f)) { selectedTemporalTab = 1 }
+                TemporalTabButton("🔮 Expect", selectedTemporalTab == 2, Modifier.weight(1f)) { selectedTemporalTab = 2 }
             }
 
             // Tab Content
@@ -123,14 +132,16 @@ private fun TemporalTabButton(
             .clip(RoundedCornerShape(4.dp))
             .background(if (isSelected) Brand.copy(alpha = 0.25f) else Color.Transparent)
             .clickable { onClick() }
-            .padding(vertical = 5.dp),
+            .padding(vertical = 5.dp, horizontal = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
             color = if (isSelected) Brand else TextMuted,
-            fontSize = 9.5.sp,
+            fontSize = 8.5.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -308,6 +319,17 @@ private fun CognitiveStateBadge(state: String) {
         border = BorderStroke(1.dp, Brand.copy(alpha = 0.5f)),
         shape = RoundedCornerShape(4.dp),
     ) {
-        Text(state, color = Brand, fontSize = 8.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+        Text(
+            // Truncate to first 2 words so badge stays compact
+            state.split(" ").take(2).joinToString(" "),
+            color = Brand,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .widthIn(max = 90.dp)
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        )
     }
 }

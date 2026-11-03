@@ -98,7 +98,7 @@ internal fun ViewportPanel(
                     if (target != null) state.selectedPoint = target
                 },
                 onHoverCallbackScene = { state.activeSplineTargetScene = it },
-                modifier = Modifier.width(280.dp).fillMaxHeight(),
+                modifier = Modifier.width(320.dp).fillMaxHeight(),
             )
         }
 
@@ -158,20 +158,21 @@ internal fun FullscreenGraphView(
 
 @Composable
 private fun TrajectoryHeader() {
-    Row(
-        Modifier.fillMaxWidth().height(82.dp).background(BgBase)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Column(
+        Modifier.fillMaxWidth().background(BgBase).padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Eyebrow("STORY TRAJECTORY · AUDIENCE COGNITIVE OVERLAY")
-            Text("The screenplay in vector space", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = TextHigh)
-            Text(
-                "3D spatial narrative trajectory with real-time audience expectation modeling.",
-                fontSize = 10.sp, color = TextMid, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Eyebrow("STORY TRAJECTORY · COGNITIVE OVERLAY")
+                Text("The screenplay in vector space", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextHigh)
+            }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             AxisLegend("Plot", AxisPlot)
             AxisLegend("Character Arc", AxisChar)
             AxisLegend("Emotion", AxisEmot)
@@ -672,7 +673,7 @@ private fun TrackMetrics(track: NarrativeTrack?) {
 
             MetricCell(
                 label = "OVERALL PACING",
-                value = track?.summary?.pacingRating?.split(" ")?.take(2)?.joinToString(" ") ?: "—",
+                value = track?.summary?.pacingRating ?: "—",
                 detail = track?.let { "Velocity ${String.format("%.1f", it.summary.meanVelocity)} · Rule engine" } ?: "3D score movement",
                 helpText = "Pacing velocity calculates average 3D Euclidean movement per scene across Plot, Character, and Emotion using our internal algorithmic engine.",
                 onHelpClick = { activeHelp = it },
@@ -767,18 +768,29 @@ private fun SceneMap(
     LazyColumn(modifier) {
         items(points, key = { it.sceneIndex }) { point ->
             Row(
-                Modifier.fillMaxWidth().height(34.dp)
+                Modifier.fillMaxWidth().height(36.dp)
                     .background(if (point.sceneIndex == selectedIndex) Brand.copy(alpha = 0.12f) else BgBase)
                     .clickable { onSelect(point) }
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("${point.sceneIndex}", color = TextMuted, fontSize = 10.sp, modifier = Modifier.width(48.dp))
-                Text("${String.format("%.0f", narrativeTime(point, points.size) * 10)}%", color = AxisTime, fontSize = 9.sp, modifier = Modifier.width(38.dp))
+                // Scene #
+                Text("${point.sceneIndex}", color = TextMuted, fontSize = 10.sp, modifier = Modifier.width(28.dp))
+                // % through
+                Text("${String.format("%.0f", narrativeTime(point, points.size) * 10)}%", color = AxisTime, fontSize = 9.sp, modifier = Modifier.width(34.dp))
+                // Scene title
                 Text(point.sceneTitle, color = TextHigh, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text(point.storyPhase, color = parseHexColor(point.storyColor), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(88.dp))
-                Text(if (point.sceneIndex == 1) "—" else String.format("%.2f", point.deltaD), color = TextMid, fontSize = 9.sp, modifier = Modifier.width(55.dp))
-                Text(point.beatType, color = if (point.isDeadZone) FlagDead else TextMid, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(142.dp))
+                // Act / Phase
+                Text(point.storyPhase, color = parseHexColor(point.storyColor), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(82.dp))
+                // Δ movement
+                Text(
+                    if (point.sceneIndex == 1) "—" else String.format("%.2f", point.deltaD),
+                    color = if (point.isDeadZone) FlagDead else TextMid,
+                    fontSize = 9.sp,
+                    modifier = Modifier.width(44.dp),
+                )
+                // Beat type
+                Text(point.beatType, color = if (point.isDeadZone) FlagDead else TextMid, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(148.dp))
             }
             HorizontalRule()
         }
@@ -824,7 +836,7 @@ private fun WriterExecutiveSummary(
         shape = RoundedCornerShape(6.dp),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
-        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("💡 30-SECOND WRITER ACTION SUMMARY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Brand)
                 Spacer(Modifier.weight(1f))
@@ -903,22 +915,25 @@ private fun InsightRow(
     actionLabel: String?,
     onClick: () -> Unit,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(bulletColor))
-        Spacer(Modifier.width(8.dp))
-        Text(text, fontSize = 11.sp, color = TextHigh, modifier = Modifier.weight(1f))
-        if (actionLabel != null) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
+            Box(Modifier.padding(top = 4.dp).size(6.dp).clip(RoundedCornerShape(3.dp)).background(bulletColor))
             Spacer(Modifier.width(8.dp))
-            Surface(
-                color = Brand.copy(alpha = 0.12f),
-                border = BorderStroke(1.dp, Brand.copy(alpha = 0.4f)),
-                shape = RoundedCornerShape(4.dp),
-                modifier = Modifier.clickable { onClick() }
-            ) {
-                Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(actionLabel, color = Brand, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.width(2.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Brand, modifier = Modifier.size(10.dp))
+            Text(text, fontSize = 10.5.sp, color = TextHigh, lineHeight = 15.sp, modifier = Modifier.weight(1f))
+        }
+        if (actionLabel != null) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Surface(
+                    color = Brand.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, Brand.copy(alpha = 0.4f)),
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier.clickable { onClick() }
+                ) {
+                    Row(Modifier.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(actionLabel, color = Brand, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(3.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Brand, modifier = Modifier.size(10.dp))
+                    }
                 }
             }
         }
