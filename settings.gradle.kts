@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "3DSCRIPT"
-include(":shared", ":engine", ":app")
+include(":shared", ":engine", ":app", ":ml")

@@ -18,6 +18,8 @@ import com.threescript.app.network.EngineClient
 import com.threescript.app.ui.panels.*
 import com.threescript.app.ui.components.SettingsDialog
 import com.threescript.app.ui.export.PdfExporter
+import com.threescript.app.ui.ml.MLStudioWindow
+import com.threescript.app.ui.ml.MLTrainingState
 import kotlinx.coroutines.*
 import java.awt.FileDialog
 import java.awt.Frame
@@ -154,7 +156,9 @@ fun ApplicationScope.MainWindow(onCloseRequest: () -> Unit) {
 @Composable
 private fun TopBar(state: AppState, client: EngineClient, scope: CoroutineScope) {
     var showSettings by remember { mutableStateOf(false) }
+    var showMlStudio by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
+    val mlState = remember { MLTrainingState() }
 
     Surface(color = BgSurface, tonalElevation = 0.dp) {
         Row(
@@ -214,6 +218,10 @@ private fun TopBar(state: AppState, client: EngineClient, scope: CoroutineScope)
                 }
             }
 
+            TopBarButton("ML Studio", Icons.Default.Psychology) {
+                showMlStudio = true
+            }
+
             TopBarButton("Settings", Icons.Default.Settings) {
                 showSettings = true
             }
@@ -222,6 +230,13 @@ private fun TopBar(state: AppState, client: EngineClient, scope: CoroutineScope)
 
     if (showSettings) {
         SettingsDialog(state = state, onDismiss = { showSettings = false })
+    }
+
+    if (showMlStudio) {
+        MLStudioWindow(
+            onCloseRequest = { showMlStudio = false },
+            state = mlState,
+        )
     }
 }
 
