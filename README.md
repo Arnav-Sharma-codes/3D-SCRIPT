@@ -1,6 +1,6 @@
 # 3DSCRIPT — Native Kotlin / Compose Multiplatform
 
-3D Script Studio analyzes screenplays scene by scene, mapping plot progression, character arc, and emotional flux into a time-ordered 3D trajectory.
+3D Script Studio analyzes screenplays scene by scene, mapping plot progression, character arc, and emotional flux into a time-ordered 3D trajectory. *A brand new machine learning architecture has been added which is currently in development*
 
 
 https://github.com/user-attachments/assets/e30fdcb2-b4f4-49d6-8397-29a3d1833e52
