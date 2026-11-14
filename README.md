@@ -60,6 +60,7 @@ https://github.com/user-attachments/assets/59d95a5e-bfc7-4bdc-9ddd-8f59a88d9807
 
 - Engine binds to `127.0.0.1` only — never accessible from network
 - Script text never leaves your machine except for Gemini AI calls (user-controlled, user's own API key)
+- Short-form trend checks use Gemini's Google Search grounding on the submitted script topic; surfaced sources are linked in the app, and Google Search grounding usage may incur Gemini API charges
 - No telemetry, analytics, or cloud sync
 - Use `provider=mock` for fully offline operation
 

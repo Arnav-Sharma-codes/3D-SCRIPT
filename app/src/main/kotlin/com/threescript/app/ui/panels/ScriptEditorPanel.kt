@@ -16,6 +16,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.unit.*
 import com.threescript.app.AppState
+import com.threescript.app.WritingMode
 import com.threescript.app.ui.*
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.text.PDFTextStripper
@@ -43,6 +44,7 @@ fun ScriptEditorPanel(
     modifier: Modifier = Modifier,
     state: AppState,
     onAnalyze: () -> Unit,
+    onAnalyzeShortForm: () -> Unit,
 ) {
     Column(modifier.background(BgBase)) {
         Row(
@@ -65,8 +67,78 @@ fun ScriptEditorPanel(
                 )
             }
             if (state.hasResults) {
-                Text("${state.sceneCount} SCENES", fontSize = 9.sp, color = TextMid, fontWeight = FontWeight.Bold)
+                Text("${state.sceneCount} ${if (state.writingMode == WritingMode.SHORT_FORM) "BEATS" else "SCENES"}", fontSize = 9.sp, color = TextMid, fontWeight = FontWeight.Bold)
             }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(BorderSubtle))
+
+        Row(
+            Modifier.fillMaxWidth().height(40.dp).background(BgSurface).padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Text("WRITE", fontSize = 9.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+            WritingModeChip("Screenplay", state.writingMode == WritingMode.SCREENPLAY) {
+                state.writingMode = WritingMode.SCREENPLAY
+                state.track = null
+                state.shortFormReview = null
+                state.selectedPoint = null
+            }
+            WritingModeChip("Short Form", state.writingMode == WritingMode.SHORT_FORM) {
+                state.writingMode = WritingMode.SHORT_FORM
+                state.track = null
+                state.shortFormReview = null
+                state.selectedPoint = null
+            }
+        }
+        if (state.writingMode == WritingMode.SHORT_FORM) {
+            Row(
+                Modifier.fillMaxWidth().height(34.dp).background(BgSurface).padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("PLATFORM", fontSize = 8.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                listOf(
+                    com.threescript.shared.api.ShortFormPlatform.TIKTOK,
+                    com.threescript.shared.api.ShortFormPlatform.INSTAGRAM_REELS,
+                    com.threescript.shared.api.ShortFormPlatform.YOUTUBE_SHORTS,
+                ).forEach { platform ->
+                    val shortName = when (platform) {
+                        com.threescript.shared.api.ShortFormPlatform.TIKTOK -> "TikTok"
+                        com.threescript.shared.api.ShortFormPlatform.INSTAGRAM_REELS -> "Reels"
+                        com.threescript.shared.api.ShortFormPlatform.YOUTUBE_SHORTS -> "Shorts"
+                    }
+                    WritingModeChip(shortName, state.shortFormPlatform == platform) {
+                        state.shortFormPlatform = platform
+                        state.track = null
+                        state.shortFormReview = null
+                        state.selectedPoint = null
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                Text("AI", fontSize = 8.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                WritingModeChip("Gemini", state.provider == "gemini") {
+                    state.provider = "gemini"
+                    state.track = null
+                    state.shortFormReview = null
+                    state.selectedPoint = null
+                }
+                WritingModeChip("Offline", state.provider == "mock") {
+                    state.provider = "mock"
+                    state.track = null
+                    state.shortFormReview = null
+                    state.selectedPoint = null
+                }
+            }
+            Text(
+                if (state.provider == "gemini" && state.geminiApiKey.isNotBlank())
+                    "Checks current public web trends through Gemini Search; Gemini usage charges may apply."
+                else if (state.provider == "gemini") "Add a Gemini API key to check current public web trends."
+                else "Offline scoring uses craft cues and does not check current trends.",
+                fontSize = 8.sp,
+                color = TextMuted,
+                modifier = Modifier.padding(start = 14.dp, bottom = 5.dp),
+            )
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(BorderSubtle))
 
@@ -76,7 +148,7 @@ fun ScriptEditorPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val tokens = state.track?.cognitiveTokens.orEmpty()
+            val tokens = if (state.writingMode == WritingMode.SHORT_FORM) emptyList() else state.track?.cognitiveTokens.orEmpty()
             if (state.hasResults && tokens.isNotEmpty()) {
                 Surface(
                     color = if (state.scriptViewMode == 0) Brand.copy(alpha = 0.2f) else Color.Transparent,
@@ -99,7 +171,13 @@ fun ScriptEditorPanel(
                     }
                 }
             } else {
-                Text("Paste Fountain, plain text, or scene headings", fontSize = 10.sp, color = TextMuted, modifier = Modifier.weight(1f))
+                Text(
+                    if (state.writingMode == WritingMode.SHORT_FORM) "Rough notes, voice-to-text, or polished copy"
+                    else "Paste Fountain, plain text, or scene headings",
+                    fontSize = 10.sp,
+                    color = TextMuted,
+                    modifier = Modifier.weight(1f),
+                )
             }
 
             Spacer(Modifier.weight(1f))
@@ -108,6 +186,7 @@ fun ScriptEditorPanel(
                 TextButton(onClick = {
                     state.scriptText = ""
                     state.track = null
+                    state.shortFormReview = null
                     state.selectedPoint = null
                     state.activeSplineTargetScene = null
                 }) {
@@ -123,7 +202,7 @@ fun ScriptEditorPanel(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp)
         ) {
-            if (state.scriptViewMode == 1 && state.hasResults) {
+            if (state.scriptViewMode == 1 && state.hasResults && state.writingMode == WritingMode.SCREENPLAY) {
                 CognitiveScriptOverlayView(state)
             } else {
                 val scroll = rememberScrollState()
@@ -161,7 +240,12 @@ fun ScriptEditorPanel(
 
                 BasicTextField(
                     value = state.scriptText,
-                    onValueChange = { state.scriptText = it },
+                    onValueChange = {
+                        state.scriptText = it
+                        state.track = null
+                        state.shortFormReview = null
+                        state.selectedPoint = null
+                    },
                     textStyle = TextStyle(
                         color = TextHigh,
                         fontSize = 13.sp,
@@ -176,7 +260,9 @@ fun ScriptEditorPanel(
                     decorationBox = { innerField ->
                         if (state.scriptText.isEmpty()) {
                             Text(
-                                text = "Paste your screenplay here…\n\nSupports Fountain format (INT./EXT. sluglines)\nor plain prose narrative text.",
+                                text = if (state.writingMode == WritingMode.SHORT_FORM)
+                                    "Write or paste your creator script…\n\nMessy notes, speech-to-text, bullets, or polished copy are all okay.\nWe'll map each beat and check current public trend context."
+                                else "Paste your screenplay here…\n\nSupports Fountain format (INT./EXT. sluglines)\nor plain prose narrative text.",
                                 color = TextMuted,
                                 fontSize = 13.sp,
                                 fontFamily = FontFamily.Monospace,
@@ -211,7 +297,7 @@ fun ScriptEditorPanel(
 
                 // Analyze button
                 Button(
-                    onClick = onAnalyze,
+                    onClick = if (state.writingMode == WritingMode.SHORT_FORM) onAnalyzeShortForm else onAnalyze,
                     enabled = state.scriptText.isNotEmpty() && !state.isAnalyzing && state.engineReady,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Brand,
@@ -233,11 +319,24 @@ fun ScriptEditorPanel(
                     } else {
                         Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Analyze Script", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(if (state.writingMode == WritingMode.SHORT_FORM) "Analyze Short Form" else "Analyze Script", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun WritingModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        color = if (selected) Brand.copy(alpha = 0.18f) else Color.Transparent,
+        border = BorderStroke(1.dp, if (selected) Brand.copy(alpha = 0.6f) else BorderSubtle),
+        shape = RoundedCornerShape(5.dp),
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Text(label, color = if (selected) Brand else TextMuted, fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp))
     }
 }
 
@@ -266,6 +365,7 @@ private fun importScreenplay(state: AppState) {
         state.scriptText = text
         state.projectTitle = file.nameWithoutExtension
         state.track = null
+        state.shortFormReview = null
         state.selectedPoint = null
         state.analysisError = null
     } catch (error: Exception) {

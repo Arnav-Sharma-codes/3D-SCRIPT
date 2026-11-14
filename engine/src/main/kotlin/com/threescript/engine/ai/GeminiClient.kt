@@ -1,6 +1,9 @@
 package com.threescript.engine.ai
 
 import com.threescript.shared.model.SceneBlock
+import com.threescript.shared.api.ShortFormPlatform
+import com.threescript.shared.api.ShortFormReview
+import com.threescript.shared.api.TrendSource
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
@@ -11,6 +14,7 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
+import java.time.Instant
 import org.slf4j.LoggerFactory
 
 /**
@@ -76,7 +80,65 @@ ${sceneTextForScoring(scene.rawText)}"""
         throw GeminiException("Gemini batch failed after 3 attempts: ${lastErr?.message}", lastErr)
     }
 
-    private suspend fun callGemini(prompt: String): String {
+    /** Score each creator beat and audience potential using live Google Search grounding. */
+    suspend fun analyzeShortForm(
+        beats: List<SceneBlock>,
+        rawText: String,
+        platform: ShortFormPlatform,
+    ): ShortFormGeminiResult {
+        val beatText = beats.joinToString("\n\n") { beat ->
+            """BEAT ${beat.index}: ${beat.title}
+${sceneTextForScoring(beat.rawText, 900)}"""
+        }
+        val prompt = buildShortFormPrompt(beatText, rawText, beats.size, platform)
+        val response = callGeminiGrounded(prompt)
+        val parsed = parseJsonObject(response.text)
+        val scores = parseSceneScores(parsed, beats)
+        fun score(key: String) = parsed[key]?.jsonPrimitive?.intOrNull?.coerceIn(0, 100) ?: 50
+        val review = ShortFormReview(
+            platform = platform,
+            audiencePotential = score("audiencePotential"),
+            hookScore = score("hookScore"),
+            relatabilityScore = score("relatabilityScore"),
+            retentionScore = score("retentionScore"),
+            trendAlignmentScore = score("trendAlignmentScore"),
+            headline = parsed["headline"]?.jsonPrimitive?.contentOrNull ?: "Short-form review",
+            diagnosis = parsed["diagnosis"]?.jsonPrimitive?.contentOrNull ?: "Review completed.",
+            recommendations = parsed["recommendations"]?.jsonArray
+                ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                ?.take(3)
+                .orEmpty(),
+            trendSources = response.sources,
+            searchSuggestionHtml = response.searchSuggestionHtml,
+            benchmarkLabel = if (response.sources.isNotEmpty())
+                "AI estimate · live web trend context checked ${Instant.now()}"
+            else "AI estimate · web grounding returned no sources",
+        )
+        return ShortFormGeminiResult(scores, review)
+    }
+
+    private suspend fun callGemini(prompt: String): String = extractText(callGeminiResponse(prompt, false))
+
+    private suspend fun callGeminiGrounded(prompt: String): GeminiGroundedResponse {
+        val body = callGeminiResponse(prompt, true)
+        val candidate = body["candidates"]?.jsonArray?.firstOrNull()?.jsonObject
+            ?: throw GeminiException("Could not extract grounded candidate from Gemini response")
+        val sources = candidate["groundingMetadata"]?.jsonObject
+            ?.get("groundingChunks")?.jsonArray
+            ?.mapNotNull { chunk ->
+                val web = chunk.jsonObject["web"]?.jsonObject ?: return@mapNotNull null
+                val url = web["uri"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                TrendSource(web["title"]?.jsonPrimitive?.contentOrNull ?: url, url)
+            }
+            ?.distinctBy { it.url }
+            .orEmpty()
+        val searchSuggestionHtml = candidate["groundingMetadata"]?.jsonObject
+            ?.get("searchEntryPoint")?.jsonObject
+            ?.get("renderedContent")?.jsonPrimitive?.contentOrNull
+        return GeminiGroundedResponse(extractText(body), sources, searchSuggestionHtml)
+    }
+
+    private suspend fun callGeminiResponse(prompt: String, googleSearch: Boolean): JsonObject {
         val body = buildJsonObject {
             put("contents", buildJsonArray {
                 add(buildJsonObject {
@@ -87,8 +149,13 @@ ${sceneTextForScoring(scene.rawText)}"""
             })
             put("generationConfig", buildJsonObject {
                 put("temperature", 0.3)
-                put("maxOutputTokens", 4096)
+                put("maxOutputTokens", 8192)
             })
+            if (googleSearch) {
+                put("tools", buildJsonArray {
+                    add(buildJsonObject { put("google_search", buildJsonObject {}) })
+                })
+            }
         }
 
         val response = httpClient.post(endpoint) {
@@ -100,31 +167,22 @@ ${sceneTextForScoring(scene.rawText)}"""
         if (!response.status.isSuccess())
             throw GeminiException("HTTP ${response.status.value}: ${response.bodyAsText()}")
 
-        val responseBody = response.body<JsonObject>()
-        return responseBody["candidates"]
+        return response.body<JsonObject>()
+    }
+
+    private fun extractText(responseBody: JsonObject): String = responseBody["candidates"]
             ?.jsonArray?.firstOrNull()?.jsonObject
             ?.get("content")?.jsonObject
             ?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject
             ?.get("text")?.jsonPrimitive?.content
             ?: throw GeminiException("Could not extract text from Gemini response")
-    }
 
     private fun parseBatchResponse(raw: String, scenes: List<SceneBlock>): List<RawDimensionScore> {
+        return parseSceneScores(parseJsonObject(raw), scenes)
+    }
+
+    private fun parseSceneScores(parsed: JsonObject, scenes: List<SceneBlock>): List<RawDimensionScore> {
         // Strip markdown fences
-        val cleaned = raw.trim()
-            .removePrefix("```json").removePrefix("```")
-            .removeSuffix("```").trim()
-
-        val parsed = runCatching { json.parseToJsonElement(cleaned).jsonObject }.getOrNull()
-            ?: runCatching {
-                val start = cleaned.indexOf('{')
-                val end = cleaned.lastIndexOf('}')
-                if (start >= 0 && end > start)
-                    json.parseToJsonElement(cleaned.substring(start, end + 1)).jsonObject
-                else null
-            }.getOrNull()
-            ?: throw GeminiException("Cannot parse JSON from Gemini response: ${raw.take(200)}")
-
         val sceneArray = parsed["scenes"]?.jsonArray
             ?: throw GeminiException("Missing 'scenes' key in Gemini response")
 
@@ -143,6 +201,17 @@ ${sceneTextForScoring(scene.rawText)}"""
         }
 
         return scenes.mapNotNull { resultMap[it.index] }
+    }
+
+    private fun parseJsonObject(raw: String): JsonObject {
+        val cleaned = raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+        return runCatching { json.parseToJsonElement(cleaned).jsonObject }.getOrNull()
+            ?: runCatching {
+                val start = cleaned.indexOf('{')
+                val end = cleaned.lastIndexOf('}')
+                if (start >= 0 && end > start) json.parseToJsonElement(cleaned.substring(start, end + 1)).jsonObject else null
+            }.getOrNull()
+            ?: throw GeminiException("Cannot parse JSON from Gemini response: ${raw.take(200)}")
     }
 
     private fun buildBatchPrompt(sceneText: String, count: Int): String = """
@@ -192,6 +261,52 @@ Return ONLY a valid JSON object exactly matching this schema (no markdown, no co
 }
 """.trimIndent()
 
+    private fun buildShortFormPrompt(
+        beatText: String,
+        rawText: String,
+        count: Int,
+        platform: ShortFormPlatform,
+    ): String = """
+You are a short-form video script analyst for ${platform.displayName}. The creator's input may
+be messy notes, speech-to-text, bullet points, or polished copy. Infer intent and score the
+actual idea rather than penalizing grammar or formatting.
+
+Use Google Search grounding now to check current public creator/platform guidance and recent
+short-form formats relevant to the subject of this script from the last 90 days. Today's date is
+${java.time.LocalDate.now()}. Prefer current official creator
+resources and dated, trustworthy sources. Focus on useful patterns, not copying a specific
+viral video. Do not claim access to private platform analytics, exact view predictions, or
+platform-native trend dashboards. If no relevant recent signals are found, say so and judge
+evergreen craft instead of inventing a trend.
+
+Return a beat point for each of the $count beats:
+  x — HOOK / CLARITY (0–10): immediate promise, specificity, and reason to keep watching.
+  y — VIEWER RELEVANCE (0–10): identification, usefulness, novelty, or emotional connection.
+  z — RETENTION / PAYOFF (0–10): open loops, escalation, surprise, or satisfying reward.
+
+Also estimate overall scores from 0–100. Audience potential weighs the script's own craft and
+its fit with the current public trend context you found. State the date-aware context briefly.
+
+RAW CREATOR INPUT:
+${sceneTextForScoring(rawText, 5000)}
+
+ORDERED BEATS:
+$beatText
+
+Return ONLY JSON matching this schema:
+{
+  "scenes": [{"index": 1, "x": 0.0, "y": 0.0, "z": 0.0, "title": "Hook", "summary": "..."}],
+  "audiencePotential": 0,
+  "hookScore": 0,
+  "relatabilityScore": 0,
+  "retentionScore": 0,
+  "trendAlignmentScore": 0,
+  "headline": "Short headline",
+  "diagnosis": "One concise sentence that distinguishes live trend fit from evergreen craft.",
+  "recommendations": ["Specific edit", "Specific edit", "Specific edit"]
+}
+""".trimIndent()
+
     private fun sceneTextForScoring(text: String, limit: Int = 1800): String =
         if (text.length <= limit) text
         else {
@@ -200,6 +315,13 @@ Return ONLY a valid JSON object exactly matching this schema (no markdown, no co
             "$head\n\n[Middle portion omitted for length; scene ending follows]\n\n$tail"
         }
 }
+
+data class ShortFormGeminiResult(val scores: List<RawDimensionScore>, val review: ShortFormReview)
+private data class GeminiGroundedResponse(
+    val text: String,
+    val sources: List<TrendSource>,
+    val searchSuggestionHtml: String?,
+)
 
 /** Raw AI-scored dimensions for one scene. */
 data class RawDimensionScore(

@@ -161,4 +161,37 @@ class EngineClient(private val state: AppState) {
             state.isAnalyzing = false
         }
     }
+
+    suspend fun analyzeShortForm(text: String) {
+        state.isAnalyzing = true
+        state.analysisError = null
+        state.track = null
+        state.shortFormReview = null
+        state.selectedPoint = null
+        try {
+            val resp: ShortFormAnalyzeResponse = http.post("$baseUrl/api/analyze-short-form") {
+                contentType(ContentType.Application.Json)
+                if (state.geminiApiKey.isNotBlank()) header("X-Gemini-API-Key", state.geminiApiKey)
+                if (state.geminiModel.isNotBlank()) header("X-Gemini-Model", state.geminiModel)
+                setBody(ShortFormAnalyzeRequest(
+                    text = text,
+                    platform = state.shortFormPlatform,
+                    provider = state.provider,
+                    deadZoneThreshold = state.deadZoneThreshold,
+                ))
+            }.body()
+            if (resp.error != null) {
+                state.analysisError = resp.error
+            } else {
+                state.track = resp.track
+                state.shortFormReview = resp.review
+                state.selectedPoint = resp.track?.points?.firstOrNull()
+            }
+        } catch (e: Exception) {
+            log.error("Short-form analysis failed: ${e.message}", e)
+            state.analysisError = "Network error: ${e.message}"
+        } finally {
+            state.isAnalyzing = false
+        }
+    }
 }

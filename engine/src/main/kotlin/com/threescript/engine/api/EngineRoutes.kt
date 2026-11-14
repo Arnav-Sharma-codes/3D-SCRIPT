@@ -4,6 +4,7 @@ import com.threescript.engine.ENGINE_VERSION
 import com.threescript.engine.config.EngineConfig
 import com.threescript.engine.metrics.NarrativeMetrics
 import com.threescript.engine.parser.NarrativeParser
+import com.threescript.engine.shortform.ShortFormAnalyzer
 import com.threescript.engine.vector.VectorMapper
 import com.threescript.shared.api.*
 import io.ktor.http.*
@@ -99,6 +100,32 @@ fun Application.configureRoutes() {
 
             log.info("Analysis complete: ${track.points.size} scene points, pacing=${track.summary.pacingRating}")
             call.respond(AnalyzeResponse(track = track))
+        }
+
+        post("/api/analyze-short-form") {
+            val req = runCatching { call.receive<ShortFormAnalyzeRequest>() }.getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ShortFormAnalyzeResponse(error = "Invalid JSON body"))
+                return@post
+            }
+            if (req.text.isBlank()) {
+                call.respond(HttpStatusCode.BadRequest, ShortFormAnalyzeResponse(error = "No creator script provided"))
+                return@post
+            }
+            val apiKey = call.request.headers["X-Gemini-API-Key"]
+                ?.takeIf { it.isNotBlank() }
+                ?: EngineConfig.get("GEMINI_API_KEY")
+            val model = call.request.headers["X-Gemini-Model"]
+                ?.takeIf { it.isNotBlank() }
+                ?: EngineConfig.get("GEMINI_MODEL")
+                ?: "gemini-3.6-flash"
+            val result = runCatching {
+                ShortFormAnalyzer.analyze(req.text, req.platform, req.provider, apiKey, model, req.deadZoneThreshold)
+            }.getOrElse { e ->
+                log.error("Short-form analysis failed: ${e.message}", e)
+                call.respond(HttpStatusCode.InternalServerError, ShortFormAnalyzeResponse(error = "Short-form scoring error: ${e.message}"))
+                return@post
+            }
+            call.respond(ShortFormAnalyzeResponse(track = result.first, review = result.second))
         }
     }
 }

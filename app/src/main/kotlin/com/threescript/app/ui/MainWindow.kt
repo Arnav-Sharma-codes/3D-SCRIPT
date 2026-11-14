@@ -95,6 +95,7 @@ fun ApplicationScope.MainWindow(onCloseRequest: () -> Unit) {
                     track = state.track!!,
                     selectedPoint = state.selectedPoint,
                     camera = graphCamera,
+                    isShortForm = state.writingMode == com.threescript.app.WritingMode.SHORT_FORM,
                     onPointSelected = {
                         state.selectedPoint = it
                     },
@@ -121,7 +122,10 @@ fun ApplicationScope.MainWindow(onCloseRequest: () -> Unit) {
                                             state.analysisError = parsed.error ?: "No scenes parsed"
                                         }
                                     }
-                                }
+                                },
+                                onAnalyzeShortForm = {
+                                    scope.launch { client.analyzeShortForm(state.scriptText) }
+                                },
                             )
 
                             Box(Modifier.width(1.dp).fillMaxHeight().background(BorderSubtle))
@@ -138,7 +142,7 @@ fun ApplicationScope.MainWindow(onCloseRequest: () -> Unit) {
                         }
                     }
 
-                    if (state.isAnalyzing) AnalysisOverlay()
+                    if (state.isAnalyzing) AnalysisOverlay(isShortForm = state.writingMode == com.threescript.app.WritingMode.SHORT_FORM)
 
                     state.analysisError?.let { err ->
                         ErrorBanner(
@@ -183,6 +187,7 @@ private fun TopBar(state: AppState, client: EngineClient, scope: CoroutineScope)
                 state.scriptText = SAMPLE_SCRIPT
                 state.projectTitle = "The Fracture Line"
                 state.track = null
+                state.shortFormReview = null
                 state.selectedPoint = null
             }
 
@@ -281,15 +286,15 @@ private fun TopBarButton(
 }
 
 @Composable
-private fun AnalysisOverlay() {
+private fun AnalysisOverlay(isShortForm: Boolean = false) {
     Box(
         modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
             CircularProgressIndicator(color = Brand, modifier = Modifier.size(48.dp))
-            Text("Analyzing narrative structure…", color = TextHigh, fontSize = 14.sp)
-            Text("AI scoring scenes via Gemini", color = TextMuted, fontSize = 12.sp)
+            Text(if (isShortForm) "Reading your short-form script…" else "Analyzing narrative structure…", color = TextHigh, fontSize = 14.sp)
+            Text(if (isShortForm) "Scoring beats and checking current trends" else "AI scoring scenes via Gemini", color = TextMuted, fontSize = 12.sp)
         }
     }
 }

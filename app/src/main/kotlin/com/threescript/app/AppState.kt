@@ -3,6 +3,8 @@ package com.threescript.app
 import androidx.compose.runtime.*
 import com.threescript.shared.model.NarrativeTrack
 import com.threescript.shared.model.VectorPoint
+import com.threescript.shared.api.ShortFormPlatform
+import com.threescript.shared.api.ShortFormReview
 import kotlinx.coroutines.*
 import java.nio.file.Paths
 
@@ -25,11 +27,14 @@ class AppState {
     // ── Script editor ─────────────────────────────────────────────────────────
     var scriptText: String by mutableStateOf("")
     var projectTitle: String by mutableStateOf("Untitled Project")
+    var writingMode: WritingMode by mutableStateOf(WritingMode.SCREENPLAY)
+    var shortFormPlatform: ShortFormPlatform by mutableStateOf(ShortFormPlatform.TIKTOK)
 
     // ── Analysis state ────────────────────────────────────────────────────────
     var isAnalyzing: Boolean by mutableStateOf(false)
     var analysisError: String? by mutableStateOf(null)
     var track: NarrativeTrack? by mutableStateOf(null)
+    var shortFormReview: ShortFormReview? by mutableStateOf(null)
 
     // ── Inspector state ───────────────────────────────────────────────────────
     var selectedPoint: VectorPoint? by mutableStateOf(null)
@@ -56,6 +61,8 @@ class AppState {
     val hasResults: Boolean get() = track != null
     val sceneCount: Int get() = track?.summary?.sceneCount ?: 0
 }
+
+enum class WritingMode { SCREENPLAY, SHORT_FORM }
 
 private fun loadDotEnv(): Map<String, String> {
     val candidates = listOf(".env", "../.env")

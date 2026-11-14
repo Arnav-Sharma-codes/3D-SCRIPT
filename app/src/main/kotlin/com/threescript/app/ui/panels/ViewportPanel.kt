@@ -29,6 +29,8 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
@@ -38,7 +40,12 @@ import com.threescript.app.ui.components.CognitiveTriadCard
 import com.threescript.shared.model.NarrativeTrack
 import com.threescript.shared.model.VectorPoint
 import com.threescript.shared.model.cognitive.*
+import com.threescript.shared.api.ShortFormReview
+import com.threescript.app.WritingMode
 import kotlin.math.*
+import java.awt.Desktop
+import javax.swing.JEditorPane
+import javax.swing.event.HyperlinkEvent
 
 @Composable
 internal fun ViewportPanel(
@@ -49,12 +56,15 @@ internal fun ViewportPanel(
 ) {
     val track = state.track
     val points = track?.points.orEmpty()
+    val isShortForm = state.writingMode == WritingMode.SHORT_FORM
     val selectPoint: (VectorPoint) -> Unit = { point -> state.selectedPoint = point }
 
     Column(modifier.background(BgBase)) {
-        TrajectoryHeader()
+        TrajectoryHeader(isShortForm)
 
-        if (track != null) {
+        state.shortFormReview?.let { review -> ShortFormAudienceCard(review) }
+
+        if (track != null && !isShortForm) {
             WriterExecutiveSummary(
                 track = track,
                 onSelectPoint = selectPoint,
@@ -69,8 +79,8 @@ internal fun ViewportPanel(
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 GraphToolbar(
                     camera = camera,
-                    cognitiveOverlayEnabled = state.cognitiveOverlayEnabled,
-                    onToggleCognitiveOverlay = { state.cognitiveOverlayEnabled = !state.cognitiveOverlayEnabled },
+                    cognitiveOverlayEnabled = state.cognitiveOverlayEnabled && !isShortForm,
+                    onToggleCognitiveOverlay = if (isShortForm) null else ({ state.cognitiveOverlayEnabled = !state.cognitiveOverlayEnabled }),
                     onEnterFullscreen = onEnterFullscreen.takeIf { track != null },
                 )
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -93,6 +103,7 @@ internal fun ViewportPanel(
             SceneInspector(
                 point = state.selectedPoint,
                 track = track,
+                isShortForm = isShortForm,
                 onJumpToScene = { targetIndex ->
                     val target = track?.points?.find { it.sceneIndex == targetIndex }
                     if (target != null) state.selectedPoint = target
@@ -102,12 +113,13 @@ internal fun ViewportPanel(
             )
         }
 
-        TrackMetrics(track)
-        SceneMapHeader(track)
+        TrackMetrics(track, isShortForm)
+        SceneMapHeader(track, isShortForm)
         SceneMap(
             points = points,
             selectedIndex = state.selectedPoint?.sceneIndex,
             onSelect = selectPoint,
+            isShortForm = isShortForm,
             modifier = Modifier.weight(0.42f).fillMaxWidth(),
         )
     }
@@ -118,17 +130,19 @@ internal fun FullscreenGraphView(
     track: NarrativeTrack,
     selectedPoint: VectorPoint?,
     camera: GraphCamera,
+    isShortForm: Boolean = false,
     onPointSelected: (VectorPoint) -> Unit,
     onExitFullscreen: () -> Unit,
 ) {
-    var cognitiveOverlayEnabled by remember { mutableStateOf(true) }
+    var cognitiveOverlayEnabled by remember { mutableStateOf(!isShortForm) }
     var activeSplineTargetScene by remember { mutableStateOf<Int?>(null) }
 
     Column(Modifier.fillMaxSize().background(BgBase)) {
+        TrajectoryHeader(isShortForm)
         GraphToolbar(
             camera = camera,
             cognitiveOverlayEnabled = cognitiveOverlayEnabled,
-            onToggleCognitiveOverlay = { cognitiveOverlayEnabled = !cognitiveOverlayEnabled },
+            onToggleCognitiveOverlay = if (isShortForm) null else ({ cognitiveOverlayEnabled = !cognitiveOverlayEnabled }),
             onExitFullscreen = onExitFullscreen,
         )
         Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -145,6 +159,7 @@ internal fun FullscreenGraphView(
             SceneInspector(
                 point = selectedPoint,
                 track = track,
+                isShortForm = isShortForm,
                 onJumpToScene = { targetIndex ->
                     val target = track.points.find { it.sceneIndex == targetIndex }
                     if (target != null) onPointSelected(target)
@@ -157,15 +172,15 @@ internal fun FullscreenGraphView(
 }
 
 @Composable
-private fun TrajectoryHeader() {
+private fun TrajectoryHeader(isShortForm: Boolean = false) {
     Column(
         Modifier.fillMaxWidth().background(BgBase).padding(horizontal = 20.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Eyebrow("STORY TRAJECTORY · COGNITIVE OVERLAY")
-                Text("The screenplay in vector space", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextHigh)
+                Eyebrow(if (isShortForm) "SHORT-FORM VIEWER TRAJECTORY" else "STORY TRAJECTORY · COGNITIVE OVERLAY")
+                Text(if (isShortForm) "Your short-form script in vector space" else "The screenplay in vector space", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextHigh)
             }
         }
         Row(
@@ -173,12 +188,88 @@ private fun TrajectoryHeader() {
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AxisLegend("Plot", AxisPlot)
-            AxisLegend("Character Arc", AxisChar)
-            AxisLegend("Emotion", AxisEmot)
-            AxisLegend("Expectation", ExpectationGhost)
+            AxisLegend(if (isShortForm) "Hook / Clarity" else "Plot", AxisPlot)
+            AxisLegend(if (isShortForm) "Viewer Relevance" else "Character Arc", AxisChar)
+            AxisLegend(if (isShortForm) "Retention / Payoff" else "Emotion", AxisEmot)
+            if (!isShortForm) AxisLegend("Expectation", ExpectationGhost)
             AxisLegend("Time", AxisTime)
         }
+    }
+}
+
+@Composable
+private fun ShortFormAudienceCard(review: ShortFormReview) {
+    val uriHandler = LocalUriHandler.current
+    Surface(
+        color = BgCard,
+        border = BorderStroke(1.dp, Brand.copy(alpha = .5f)),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Eyebrow("${review.platform.displayName.uppercase()} · AUDIENCE POTENTIAL")
+                    Text(review.headline, color = TextHigh, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+                Surface(color = Brand.copy(alpha = .2f), shape = RoundedCornerShape(18.dp)) {
+                    Text("${review.audiencePotential}/100", color = Brand, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                }
+            }
+            Text(review.diagnosis, color = TextMid, fontSize = 10.sp, lineHeight = 14.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                ShortFormScore("HOOK", review.hookScore, AxisPlot)
+                ShortFormScore("RELEVANCE", review.relatabilityScore, AxisChar)
+                ShortFormScore("RETENTION", review.retentionScore, AxisEmot)
+                ShortFormScore(if (review.trendSources.isEmpty()) "PATTERN FIT" else "TREND FIT", review.trendAlignmentScore, TokenSubversionAmber)
+            }
+            review.recommendations.firstOrNull()?.let {
+                Text("Next edit · $it", color = TextHigh, fontSize = 9.sp, lineHeight = 13.sp)
+            }
+            Text(review.benchmarkLabel, color = TextMuted, fontSize = 8.sp)
+            if (review.trendSources.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("TREND SOURCES", color = TextMuted, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    review.trendSources.take(3).forEach { source ->
+                        Text(
+                            text = source.title,
+                            color = Brand,
+                            fontSize = 8.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 130.dp).clickable { runCatching { uriHandler.openUri(source.url) } },
+                        )
+                    }
+                }
+            }
+            review.searchSuggestionHtml?.let { suggestionHtml ->
+                SwingPanel(
+                    factory = {
+                        JEditorPane().apply {
+                            contentType = "text/html"
+                            isEditable = false
+                            text = suggestionHtml
+                            addHyperlinkListener { event ->
+                                if (event.eventType == HyperlinkEvent.EventType.ACTIVATED) {
+                                    runCatching { Desktop.getDesktop().browse(event.url.toURI()) }
+                                }
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    update = { it.text = suggestionHtml },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShortFormScore(label: String, score: Int, color: Color) {
+    Column {
+        Text(label, color = TextMuted, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+        Text("$score", color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -502,6 +593,7 @@ private fun drawAxisLine(
 private fun SceneInspector(
     point: VectorPoint?,
     track: NarrativeTrack?,
+    isShortForm: Boolean = false,
     onJumpToScene: (Int) -> Unit = {},
     onHoverCallbackScene: (Int?) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -513,16 +605,16 @@ private fun SceneInspector(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (point == null) {
-            Eyebrow(if (track == null) "SCENE INSPECTOR" else "NO SCENE SELECTED")
+            Eyebrow(if (track == null) "${if (isShortForm) "BEAT" else "SCENE"} INSPECTOR" else "NO ${if (isShortForm) "BEAT" else "SCENE"} SELECTED")
             Text(
-                if (track == null) "Analyze a screenplay to explore its scene trajectory." else "Click any scene point in the 3D graph or list to inspect its narrative diagnostic.",
+                if (track == null) "Analyze ${if (isShortForm) "a creator script" else "a screenplay"} to explore its trajectory." else "Click any graph point to inspect its narrative diagnostic.",
                 color = TextMid, fontSize = 12.sp, lineHeight = 18.sp,
             )
             return@Column
         }
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Eyebrow("SCENE ${point.sceneIndex}")
+            Eyebrow("${if (isShortForm) "BEAT" else "SCENE"} ${point.sceneIndex}")
             Spacer(Modifier.weight(1f))
             SmallTag(point.storyPhase, parseHexColor(point.storyColor))
         }
@@ -555,12 +647,12 @@ private fun SceneInspector(
             else -> "Subdued / Setup"
         }
         ScoreBar(
-            dimension = "PLOT",
+            dimension = if (isShortForm) "HOOK / CLARITY" else "PLOT",
             plainText = "$plotWord (${String.format("%.1f", point.x)}/10)",
             value = point.x,
             color = AxisPlot,
             tag = "Gemini AI",
-            help = "Plot progression (X) scores how much external narrative stakes, story momentum, or action beats advance in this scene.",
+            help = if (isShortForm) "Hook and clarity (X) measure the opening promise and reason to keep watching this beat." else "Plot progression (X) scores how much external narrative stakes, story momentum, or action beats advance in this scene.",
             onHelp = { inspectorHelp = it }
         )
 
@@ -571,12 +663,12 @@ private fun SceneInspector(
             else -> "Subtle Internal Beat"
         }
         ScoreBar(
-            dimension = "CHARACTER",
+            dimension = if (isShortForm) "VIEWER RELEVANCE" else "CHARACTER",
             plainText = "$charWord (${String.format("%.1f", point.y)}/10)",
             value = point.y,
             color = AxisChar,
             tag = "Gemini AI",
-            help = "Character arc (Y) scores internal evolution, psychological revelation, relationship shifts, or moral dilemma.",
+            help = if (isShortForm) "Viewer relevance (Y) estimates usefulness, identification, novelty, or emotional connection." else "Character arc (Y) scores internal evolution, psychological revelation, relationship shifts, or moral dilemma.",
             onHelp = { inspectorHelp = it }
         )
 
@@ -587,12 +679,12 @@ private fun SceneInspector(
             else -> "Reflective / Quiet"
         }
         ScoreBar(
-            dimension = "TENSION",
+            dimension = if (isShortForm) "RETENTION / PAYOFF" else "TENSION",
             plainText = "$emotWord (${String.format("%.1f", point.z)}/10)",
             value = point.z,
             color = AxisEmot,
             tag = "Gemini AI",
-            help = "Emotional flux (Z) evaluates psychological tension, suspense, stakes, and narrative vulnerability.",
+            help = if (isShortForm) "Retention and payoff (Z) evaluate momentum, open loops, escalation, and reward." else "Emotional flux (Z) evaluates psychological tension, suspense, stakes, and narrative vulnerability.",
             onHelp = { inspectorHelp = it }
         )
 
@@ -600,7 +692,7 @@ private fun SceneInspector(
         val sceneCount = track?.summary?.sceneCount ?: point.sceneIndex
         val narrativeTime = narrativeTime(point, sceneCount)
         Text(
-            "Position: Scene ${point.sceneIndex} of $sceneCount · ${String.format("%.0f", narrativeTime * 10)}% through script",
+            "Position: ${if (isShortForm) "Beat" else "Scene"} ${point.sceneIndex} of $sceneCount · ${String.format("%.0f", narrativeTime * 10)}% through script",
             color = TextMuted,
             fontSize = 9.sp,
         )
@@ -623,23 +715,31 @@ private fun SceneInspector(
 
         if (point.pacingNote.isNotBlank()) {
             HorizontalRule()
-            Eyebrow("STORY DOCTOR DIAGNOSTIC")
+            Eyebrow(if (isShortForm) "BEAT DIAGNOSTIC" else "STORY DOCTOR DIAGNOSTIC")
             Text(point.beatType, color = TextHigh, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Text(point.pacingNote, color = TextMid, fontSize = 10.sp, lineHeight = 15.sp)
+            Text(
+                if (isShortForm) "Hook, viewer relevance, and retention cues change only slightly from the previous beat; consider sharpening the transition."
+                else point.pacingNote,
+                color = TextMid,
+                fontSize = 10.sp,
+                lineHeight = 15.sp,
+            )
         }
 
-        val triadState = track?.cognitiveOverlay?.find { it.sceneIndex == point.sceneIndex }
-        HorizontalRule()
-        CognitiveTriadCard(
-            triadState = triadState,
-            onJumpToScene = onJumpToScene,
-            onHoverCallbackScene = onHoverCallbackScene,
-        )
+        if (!isShortForm) {
+            val triadState = track?.cognitiveOverlay?.find { it.sceneIndex == point.sceneIndex }
+            HorizontalRule()
+            CognitiveTriadCard(
+                triadState = triadState,
+                onJumpToScene = onJumpToScene,
+                onHoverCallbackScene = onHoverCallbackScene,
+            )
+        }
     }
 }
 
 @Composable
-private fun TrackMetrics(track: NarrativeTrack?) {
+private fun TrackMetrics(track: NarrativeTrack?, isShortForm: Boolean = false) {
     var activeHelp by remember { mutableStateOf<String?>(null) }
 
     Column {
@@ -668,11 +768,11 @@ private fun TrackMetrics(track: NarrativeTrack?) {
             val sceneCount = track?.summary?.sceneCount ?: 0
             val deadZones = track?.summary?.deadZoneCount ?: 0
             val deadPct = if (sceneCount <= 0) 0 else (deadZones.toDouble() / sceneCount * 100).toInt()
-            val climaxIdx = track?.summary?.climaxSceneIndex
+            val climaxIdx = if (isShortForm) track?.points?.maxByOrNull { it.z }?.sceneIndex else track?.summary?.climaxSceneIndex
             val climaxPct = if (sceneCount <= 1 || climaxIdx == null) 0 else ((climaxIdx - 1).toDouble() / (sceneCount - 1) * 100).toInt()
 
             MetricCell(
-                label = "OVERALL PACING",
+                label = if (isShortForm) "BEAT FLOW" else "OVERALL PACING",
                 value = track?.summary?.pacingRating ?: "—",
                 detail = track?.let { "Velocity ${String.format("%.1f", it.summary.meanVelocity)} · Rule engine" } ?: "3D score movement",
                 helpText = "Pacing velocity calculates average 3D Euclidean movement per scene across Plot, Character, and Emotion using our internal algorithmic engine.",
@@ -688,7 +788,7 @@ private fun TrackMetrics(track: NarrativeTrack?) {
                 modifier = Modifier.weight(1f),
             )
             MetricCell(
-                label = "DRAMATIC CLIMAX",
+                label = if (isShortForm) "PEAK RETENTION BEAT" else "DRAMATIC CLIMAX",
                 value = climaxIdx?.let { "Scene $it ($climaxPct%)" } ?: "—",
                 detail = track?.let { "Act III peak · Rule engine" } ?: "highest plot + emotion",
                 helpText = "Identifies the dramatic climax combining peak emotional tension, plot momentum, and third-act structural placement.",
@@ -696,7 +796,7 @@ private fun TrackMetrics(track: NarrativeTrack?) {
                 modifier = Modifier.weight(1.05f),
             )
             MetricCell(
-                label = "AI ANALYSIS",
+                label = if (isShortForm) "AI BEAT MAP" else "AI ANALYSIS",
                 value = track?.let { "$sceneCount Scenes" } ?: "—",
                 detail = "Scored · Gemini AI",
                 helpText = "Each scene is individually evaluated across 3 narrative dimensions by Google Gemini AI.",
@@ -740,12 +840,12 @@ private fun MetricCell(
 }
 
 @Composable
-private fun SceneMapHeader(track: NarrativeTrack?) {
+private fun SceneMapHeader(track: NarrativeTrack?, isShortForm: Boolean = false) {
     Row(
         Modifier.fillMaxWidth().height(38.dp).background(BgBase).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Eyebrow("SCENE MAP")
+        Eyebrow(if (isShortForm) "BEAT MAP" else "SCENE MAP")
         Spacer(Modifier.weight(1f))
         Text(track?.summary?.pacingRating ?: "Awaiting analysis", color = if (track == null) TextMuted else Brand, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
     }
@@ -756,6 +856,7 @@ private fun SceneMap(
     points: List<VectorPoint>,
     selectedIndex: Int?,
     onSelect: (VectorPoint) -> Unit,
+    isShortForm: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     if (points.isEmpty()) {
@@ -774,14 +875,18 @@ private fun SceneMap(
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Scene #
+                // Scene or beat index
                 Text("${point.sceneIndex}", color = TextMuted, fontSize = 10.sp, modifier = Modifier.width(28.dp))
                 // % through
                 Text("${String.format("%.0f", narrativeTime(point, points.size) * 10)}%", color = AxisTime, fontSize = 9.sp, modifier = Modifier.width(34.dp))
                 // Scene title
                 Text(point.sceneTitle, color = TextHigh, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                // Act / Phase
-                Text(point.storyPhase, color = parseHexColor(point.storyColor), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(82.dp))
+                // Act / phase
+                Text(
+                    if (isShortForm) point.beatType else point.storyPhase,
+                    color = parseHexColor(point.storyColor), fontSize = 9.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.width(82.dp),
+                )
                 // Δ movement
                 Text(
                     if (point.sceneIndex == 1) "—" else String.format("%.2f", point.deltaD),
